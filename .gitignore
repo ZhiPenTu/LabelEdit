@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+.cache/
+tmp/
+output/
+.models/
+.python-runtime/
+.uv-cache/
+*.tsbuildinfo
+
+# Tauri
+src-tauri/target/
+src-tauri/updater.key
+src-tauri/resources/backend/*
+!src-tauri/resources/backend/.gitkeep
+dist-backend/
+build/
