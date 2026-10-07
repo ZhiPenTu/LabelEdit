@@ -5,6 +5,14 @@ import argparse
 from pathlib import Path
 import sys
 
+# Ensure UTF-8 output on Windows consoles
+for _stream in (sys.stdout, sys.stderr):
+    if _stream and hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
 # Ensure repository root is on sys.path
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:

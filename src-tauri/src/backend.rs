@@ -72,7 +72,9 @@ fn locate_bundled_executable(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(resource_dir) = app.path().resource_dir() {
         candidates.push(resource_dir.join("resources").join("backend").join("label-edit-backend").join(exe_name));
         candidates.push(resource_dir.join("resources").join("backend").join(exe_name));
+        candidates.push(resource_dir.join("backend").join("label-edit-backend").join(exe_name));
         candidates.push(resource_dir.join("backend").join(exe_name));
+        candidates.push(resource_dir.join("label-edit-backend").join(exe_name));
         candidates.push(resource_dir.join(exe_name));
     }
 
@@ -80,7 +82,10 @@ fn locate_bundled_executable(app: &AppHandle) -> Option<PathBuf> {
         if let Some(exe_dir) = current_exe.parent() {
             candidates.push(exe_dir.join("resources").join("backend").join("label-edit-backend").join(exe_name));
             candidates.push(exe_dir.join("resources").join("backend").join(exe_name));
+            candidates.push(exe_dir.join("backend").join("label-edit-backend").join(exe_name));
             candidates.push(exe_dir.join("backend").join(exe_name));
+            candidates.push(exe_dir.join("label-edit-backend").join(exe_name));
+            candidates.push(exe_dir.join(exe_name));
         }
     }
 

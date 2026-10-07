@@ -6,9 +6,18 @@ import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
+import sys
 import threading
 import time
 from typing import Any, Literal
+
+# Ensure UTF-8 output on Windows consoles
+for _stream in (sys.stdout, sys.stderr):
+    if _stream and hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
 
 import numpy as np
 from PIL import Image
@@ -89,7 +98,10 @@ def _download_model(key: str) -> None:
             if _hash(temporary) != digest:
                 raise RuntimeError("下载模型的 SHA-256 不匹配。")
             temporary.replace(target)
-            print(f"模型已安装: {target.name}", flush=True)
+            try:
+                print(f"模型已安装: {target.name}", flush=True)
+            except Exception:
+                pass
             return
         except Exception as error:
             last_error = error
@@ -112,7 +124,10 @@ def prepare_models() -> None:
     # Local model paths and embedded dictionaries keep runtime offline.
     for language in ("latin", "chinese"):
         _engine(language)
-    print("两种语言 OCR 引擎本地加载验证通过。", flush=True)
+    try:
+        print("两种语言 OCR 引擎本地加载验证通过。", flush=True)
+    except Exception:
+        pass
 
 
 def _engine(language: Literal["latin", "chinese"]):

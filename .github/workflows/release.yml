@@ -16,6 +16,10 @@ jobs:
         platform: ['macos-latest', 'windows-latest']
 
     runs-on: ${{ matrix.platform }}
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,7 +72,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v__VERSION__' }}
           releaseName: 'LabelEdit v__VERSION__'
           releaseBody: 'LabelEdit 跨平台桌面客户端发布。包含 macOS (Apple Silicon) 与 Windows 安装包。'
           releaseDraft: false
