@@ -12,7 +12,7 @@
 
 ### 1. 开发模式启动
 
-需要 Node.js 20.19+（推荐 22 LTS）、Python 3.12 及 Rust 工具链。
+需要 Node.js 22+（推荐 24）、Python 3.12 及 Rust 工具链。
 
 ```bash
 # 启动 Tauri 桌面端开发环境（自动拉起内置 Python 后端与 Vite 前端窗口）
