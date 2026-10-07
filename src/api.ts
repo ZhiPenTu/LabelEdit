@@ -111,11 +111,11 @@ export const api = {
     const form = new FormData();
     form.append('file', file);
     const doc = await jsonRequest<PDFDocument>('/api/documents', { method: 'POST', body: form });
-    return this.fixDocumentUrls(doc);
+    return api.fixDocumentUrls(doc);
   },
   async demo(): Promise<PDFDocument> {
     const doc = await jsonRequest<PDFDocument>('/api/demo', { method: 'POST' });
-    return this.fixDocumentUrls(doc);
+    return api.fixDocumentUrls(doc);
   },
   fixDocumentUrls(doc: PDFDocument): PDFDocument {
     const base = getSyncApiBase();

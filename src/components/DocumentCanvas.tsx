@@ -1,6 +1,6 @@
 import { CheckCircle2, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
-import type { Rect } from '../api';
+import { api, type Rect } from '../api';
 import type { Editor } from '../useEditor';
 import type { Tool } from './Toolbar';
 
@@ -18,9 +18,10 @@ const rectStyle = (rect: Rect): CSSProperties => ({
 export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const documentRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [viewport, setViewport] = useState({ width: 600, height: 500 });
   const [drag, setDrag] = useState<{ start: Point; end: Point } | null>(null);
-  const [imageReady, setImageReady] = useState(false);
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
   const [compareOriginal, setCompareOriginal] = useState(false);
   const busy = Boolean(editor.operation || editor.previewLoading);
   const page = editor.document!.pages[editor.page];
@@ -28,8 +29,9 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
   const fitWidth = Math.min(Math.max(160, viewport.width - 68), Math.max(160, viewport.height - 90) * ratio);
   const width = fitWidth * zoom / 100;
   const height = width / ratio;
-  const original = `/api/documents/${encodeURIComponent(editor.document!.id)}/pages/${editor.page}/image`;
+  const original = api.imageUrl(editor.document!.id, editor.page);
   const image = compareOriginal ? original : editor.previewUrl ?? original;
+  const imageReady = loadedImage === image;
 
   useEffect(() => {
     const target = viewportRef.current;
@@ -42,7 +44,12 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => { setImageReady(false); setDrag(null); }, [image]);
+  useEffect(() => {
+    setDrag(null);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setLoadedImage(image);
+    }
+  }, [image]);
   useEffect(() => { setCompareOriginal(false); }, [editor.document?.id, editor.page, editor.edits]);
 
   function pointFor(event: PointerEvent<HTMLDivElement>): Point {
@@ -82,7 +89,7 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
           style={{ width, height }} onPointerDown={pointerDown}
           onPointerMove={event => { if (drag) setDrag(previous => previous ? { ...previous, end: pointFor(event) } : null); }}
           onPointerUp={pointerUp} onPointerCancel={() => setDrag(null)}>
-          <img src={image} alt={`PDF 第 ${editor.page + 1} 页`} draggable={false} onLoad={() => setImageReady(true)} onError={editor.imageFailed} />
+          <img ref={imgRef} src={image} alt={`PDF 第 ${editor.page + 1} 页`} draggable={false} onLoad={() => setLoadedImage(image)} onError={editor.imageFailed} />
           {imageReady && !compareOriginal ? editor.regions.map(region => {
             const selected = editor.selectedId === region.id;
             if (!selected && !showRegions) return null;
