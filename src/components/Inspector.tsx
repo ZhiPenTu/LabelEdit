@@ -1,5 +1,5 @@
 import { LoaderCircle, Trash2, Undo2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TextEdit, TextRegion } from '../api';
 import type { Editor } from '../useEditor';
 
@@ -15,7 +15,34 @@ function draftFor(region: TextRegion, saved?: TextEdit): TextEdit {
 function EditForm({ editor, region }: { editor: Editor; region: TextRegion }) {
   const [draft, setDraft] = useState<TextEdit>(() => draftFor(region, editor.selectedEdit));
   const busy = Boolean(editor.operation || editor.previewLoading);
-  useEffect(() => setDraft(draftFor(region, editor.selectedEdit)), [region, editor.selectedEdit]);
+  const lastSavedEditRef = useRef<TextEdit | undefined>(editor.selectedEdit);
+
+  useEffect(() => {
+    const prevSaved = lastSavedEditRef.current;
+    lastSavedEditRef.current = editor.selectedEdit;
+
+    if (editor.selectedEdit) {
+      const nonRectChanged = !prevSaved ||
+        prevSaved.text !== editor.selectedEdit.text ||
+        prevSaved.font_family !== editor.selectedEdit.font_family ||
+        prevSaved.font_size !== editor.selectedEdit.font_size ||
+        prevSaved.bold !== editor.selectedEdit.bold ||
+        prevSaved.text_color !== editor.selectedEdit.text_color ||
+        prevSaved.background_color !== editor.selectedEdit.background_color ||
+        prevSaved.fit !== editor.selectedEdit.fit;
+
+      if (nonRectChanged) {
+        setDraft(editor.selectedEdit);
+      }
+    } else if (prevSaved) {
+      setDraft(draftFor(region));
+    }
+  }, [editor.selectedEdit, region]);
+
+  useEffect(() => {
+    setDraft(previous => ({ ...previous, rect: region.rect }));
+  }, [region.rect]);
+
   const update = <K extends keyof TextEdit>(key: K, value: TextEdit[K]) => {
     editor.invalidateDownload();
     setDraft(previous => ({ ...previous, [key]: value }));

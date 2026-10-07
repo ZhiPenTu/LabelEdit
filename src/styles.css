@@ -82,15 +82,17 @@ h2 { font-size: 19px; font-weight: 650; line-height: 1.4; letter-spacing: -.3px;
 .document-page.drawing .text-region { pointer-events: none; }
 .document-page.is-busy { cursor: progress; }
 .text-region { position: absolute; display: block; border: 1px solid #12806a35; background: #12806a02; padding: 0; border-radius: 0; cursor: pointer; min-height: 0; min-width: 0; }
-.text-region:hover:enabled { background: #12806a13; border-color: var(--accent); }
+.text-region:hover:not(:disabled), .text-region:hover:enabled { background: #12806a13; border-color: var(--accent); }
 .text-region:disabled { opacity: 1; }
-.text-region.selected { border: 1.5px solid #00877c; background: #12806a04; z-index: 2; }
+.text-region.selected { border: 1.5px solid #00877c; background: #12806a06; z-index: 2; cursor: grab; touch-action: none; }
+.text-region.selected.is-transforming { cursor: grabbing; border: 1.5px dashed #00877c; background: rgba(0, 135, 124, 0.12); box-shadow: 0 2px 10px rgba(0, 135, 124, 0.25); z-index: 10; }
 .text-region.modified:not(.selected) { border-color: #12806a66; }
-.handle { width: 6px; height: 6px; border-radius: 1px; display: block; position: absolute; background: #00877c; }
-.top-left { top: -4px; left: -4px; }
-.top-right { top: -4px; right: -4px; }
-.bottom-left { bottom: -4px; left: -4px; }
-.bottom-right { bottom: -4px; right: -4px; }
+.handle { width: 8px; height: 8px; border-radius: 2px; display: block; position: absolute; background: #00877c; box-shadow: 0 0 0 1px #fff, 0 1px 3px rgba(0, 0, 0, 0.35); z-index: 3; touch-action: none; }
+.handle::after { content: ''; position: absolute; top: -6px; left: -6px; right: -6px; bottom: -6px; }
+.handle.top-left { top: -5px; left: -5px; cursor: nwse-resize; }
+.handle.top-right { top: -5px; right: -5px; cursor: nesw-resize; }
+.handle.bottom-left { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.handle.bottom-right { bottom: -5px; right: -5px; cursor: nwse-resize; }
 .drawn-region { position: absolute; border: 1.5px dashed var(--accent); background: #12806a13; pointer-events: none; z-index: 3; }
 .image-loading { position: absolute; inset: 0; background: #ffffffcc; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .compare-button { position: absolute; top: 18px; right: 18px; margin: 0; z-index: 4; border: 1px solid #cbd8d3; border-radius: 6px; padding: 8px 12px; background: #fff; font-size: 12px; color: #526a62; box-shadow: 0 3px 12px #1a302008; }

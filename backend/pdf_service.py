@@ -258,18 +258,18 @@ def _wrap(text: str, font_name: str, size: float, width: float) -> list[str]:
     return lines
 
 
-def _layout(text: str, font_name: str, size: float, width: float, height: float, fit: bool) -> tuple[float, list[str], float, float]:
+def _layout(text: str, font_name: str, size: float, width: float, height: float, fit: bool) -> tuple[float, list[str], float, float, float]:
     def calculate(candidate: float) -> tuple[bool, list[str], float, float]:
         lines = _wrap(text, font_name, candidate, width)
         ascent, descent = pdfmetrics.getAscentDescent(font_name, candidate)
         leading = max(candidate * 1.16, ascent - descent)
         total = ascent - descent + (len(lines) - 1) * leading
         valid = total <= height + 1e-6 and all(pdfmetrics.stringWidth(line, font_name, candidate) <= width + 1e-6 for line in lines)
-        return valid, lines, ascent, leading
+        return valid, lines, ascent, leading, total
 
-    valid, lines, ascent, leading = calculate(size)
+    valid, lines, ascent, leading, total = calculate(size)
     if valid:
-        return size, lines, ascent, leading
+        return size, lines, ascent, leading, total
     if not fit:
         raise ValueError("文字超出选定区域，请扩大区域、缩小字号或开启自动适应。")
     low, high = 0.5, size
@@ -281,8 +281,8 @@ def _layout(text: str, font_name: str, size: float, width: float, height: float,
             low = candidate
         else:
             high = candidate
-    _, lines, ascent, leading = calculate(low)
-    return low, lines, ascent, leading
+    _, lines, ascent, leading, total = calculate(low)
+    return low, lines, ascent, leading, total
 
 
 def _display_to_original(g: dict[str, Any]) -> Transformation:
@@ -324,7 +324,8 @@ def export_pdf(path: str | Path, edits: list[dict[str, Any]]) -> bytes:
             bottom = g["height"] - top - height
             # Text sizes are physical points. Account for the source UserUnit.
             font = _font_for(edit)
-            size, lines, ascent, leading = _layout(edit["text"], font, edit["font_size"] / g["unit"], width, height, edit["fit"])
+            size, lines, ascent, leading, total = _layout(edit["text"], font, edit["font_size"] / g["unit"], width, height, edit["fit"])
+            v_offset = max(0.0, (height - total) / 2) if lines else 0.0
             overlay.saveState()
             overlay.setFillColor(edit["background_color"])
             overlay.rect(x, bottom, width, height, stroke=0, fill=1)
@@ -333,7 +334,7 @@ def export_pdf(path: str | Path, edits: list[dict[str, Any]]) -> bytes:
             overlay.clipPath(clipping, stroke=0, fill=0)
             overlay.setFillColor(edit["text_color"])
             overlay.setFont(font, size)
-            baseline = g["height"] - top - ascent
+            baseline = g["height"] - top - ascent - v_offset
             for index, line in enumerate(lines):
                 overlay.drawString(x, baseline - index * leading, line)
             overlay.restoreState()

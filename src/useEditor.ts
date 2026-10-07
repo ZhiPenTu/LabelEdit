@@ -29,11 +29,15 @@ export function useEditor() {
   const openRequest = useRef(0);
   const editsRef = useRef(edits);
   const regionsRef = useRef(regionsByPage);
+  const nudgeTimerRef = useRef<number | null>(null);
+  const pendingEditsRef = useRef<TextEdit[] | null>(null);
+  const historySnapshotRef = useRef<TextEdit[] | null>(null);
   editsRef.current = edits;
   regionsRef.current = regionsByPage;
 
   useEffect(() => () => {
     if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current);
   }, [previewUrl]);
 
   useEffect(() => {
@@ -137,6 +141,12 @@ export function useEditor() {
 
   async function apply(edit: TextEdit) {
     if (!document || operation || previewLoading) return false;
+    if (nudgeTimerRef.current) {
+      window.clearTimeout(nudgeTimerRef.current);
+      nudgeTimerRef.current = null;
+    }
+    pendingEditsRef.current = null;
+    historySnapshotRef.current = null;
     setOperation('applying');
     setError(null);
     setNotice(null);
@@ -158,6 +168,12 @@ export function useEditor() {
 
   async function undo() {
     if (!history.length || operation || previewLoading) return;
+    if (nudgeTimerRef.current) {
+      window.clearTimeout(nudgeTimerRef.current);
+      nudgeTimerRef.current = null;
+    }
+    pendingEditsRef.current = null;
+    historySnapshotRef.current = null;
     setOperation('applying');
     setError(null);
     try {
@@ -165,6 +181,24 @@ export function useEditor() {
       const url = await previewFor(previous);
       if (!url) return;
       setEdits(previous);
+      setRegionsByPage(prev => {
+        const currentList = prev[page] ?? [];
+        let changed = false;
+        const nextList = currentList.map(region => {
+          const matchingEdit = previous.find(e => e.id === region.id && e.page === page);
+          if (matchingEdit && (
+            matchingEdit.rect.x !== region.rect.x ||
+            matchingEdit.rect.y !== region.rect.y ||
+            matchingEdit.rect.width !== region.rect.width ||
+            matchingEdit.rect.height !== region.rect.height
+          )) {
+            changed = true;
+            return { ...region, rect: matchingEdit.rect };
+          }
+          return region;
+        });
+        return changed ? { ...prev, [page]: nextList } : prev;
+      });
       setDownload(null);
       setHistory(items => items.slice(0, -1));
       setPreviewUrl(url);
@@ -175,6 +209,12 @@ export function useEditor() {
 
   async function remove(id: string) {
     if (operation || previewLoading) return;
+    if (nudgeTimerRef.current) {
+      window.clearTimeout(nudgeTimerRef.current);
+      nudgeTimerRef.current = null;
+    }
+    pendingEditsRef.current = null;
+    historySnapshotRef.current = null;
     const hasEdit = edits.some(edit => edit.id === id);
     if (!hasEdit) {
       setRegionsByPage(previous => ({ ...previous, [page]: (previous[page] ?? []).filter(region => region.id !== id) }));
@@ -226,6 +266,58 @@ export function useEditor() {
     setNotice('已框选区域，在右侧输入替换文字。留空可清除区域内容。');
   }
 
+  async function updateRegionRect(id: string, rect: Rect) {
+    if (!document) return;
+    setRegionsByPage(previous => {
+      const currentList = previous[page] ?? [];
+      const index = currentList.findIndex(r => r.id === id);
+      if (index === -1) return previous;
+      const updated = [...currentList];
+      updated[index] = { ...updated[index], rect };
+      return { ...previous, [page]: updated };
+    });
+
+    const existingEdit = editsRef.current.find(edit => edit.id === id);
+    if (!existingEdit) return;
+
+    if (!historySnapshotRef.current) {
+      historySnapshotRef.current = editsRef.current;
+    }
+
+    const updatedEdit = { ...existingEdit, rect };
+    const nextEdits = [...editsRef.current.filter(item => item.id !== id), updatedEdit];
+    setEdits(nextEdits);
+    pendingEditsRef.current = nextEdits;
+
+    if (nudgeTimerRef.current) {
+      window.clearTimeout(nudgeTimerRef.current);
+    }
+
+    nudgeTimerRef.current = window.setTimeout(async () => {
+      nudgeTimerRef.current = null;
+      const toApply = pendingEditsRef.current;
+      const snapshot = historySnapshotRef.current;
+      pendingEditsRef.current = null;
+      historySnapshotRef.current = null;
+      if (!toApply || !snapshot) return;
+
+      setOperation('applying');
+      setError(null);
+      try {
+        const url = await previewFor(toApply);
+        if (!url) return;
+        setHistory(previous => [...previous, snapshot]);
+        setPreviewUrl(url);
+        setDownload(null);
+        setNotice('文字位置已更新，预览与导出使用相同的排版。');
+      } catch (failure) {
+        setError(`位置更新未完成：${errorMessage(failure)}`);
+      } finally {
+        setOperation(null);
+      }
+    }, 150);
+  }
+
   async function exportPDF() {
     if (!document || operation || previewLoading) return;
     setOperation('exporting');
@@ -257,7 +349,7 @@ export function useEditor() {
     language, setLanguage, operation, previewUrl, previewLoading, error, notice, download,
     recognition: recognitionByPage[page], canUndo: history.length > 0,
     upload, openDemo: () => open(api.demo), recognize, select: setSelectedId,
-    apply, undo, remove, changePage, addManualRegion, exportPDF,
+    apply, undo, remove, changePage, addManualRegion, exportPDF, updateRegionRect,
     clearError: () => setError(null), clearNotice: () => setNotice(null),
     invalidateDownload: () => { if (download) { setDownload(null); setNotice(null); } },
     imageFailed: () => setError('页面图片加载失败，请重新打开 PDF 或检查本机服务。'),
