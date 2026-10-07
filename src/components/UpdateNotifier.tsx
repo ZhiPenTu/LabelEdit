@@ -34,8 +34,28 @@ export function UpdateNotifier({ onManualCheckRef }: { onManualCheckRef?: (check
       }
     } catch (err) {
       if (!silent) {
+        const rawMessage = err instanceof Error ? err.message : (typeof err === 'string' ? err : String(err ?? ''));
+        // If the platform/target has no separate update entry in the release manifest,
+        // it means there is no newer update package available for the current platform.
+        if (
+          rawMessage.includes('was not found in the response') ||
+          rawMessage.toLowerCase().includes('targetnotfound') ||
+          rawMessage.toLowerCase().includes('targetsnotfound')
+        ) {
+          setStatus('upToDate');
+          setVisible(true);
+          return;
+        }
+
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : '检查更新失败，请确认网络连接。');
+        setErrorMessage(
+          rawMessage.includes('Failed to fetch') ||
+          rawMessage.includes('dns') ||
+          rawMessage.includes('network') ||
+          rawMessage.includes('timeout')
+            ? '检查更新失败，请确认网络连接。'
+            : (rawMessage || '检查更新失败，请确认网络连接。')
+        );
         setVisible(true);
       }
     }
