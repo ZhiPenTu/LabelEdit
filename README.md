@@ -99,3 +99,9 @@ npm run build
 # 验证 Tauri Rust 核心编译
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
+
+---
+
+## 开源协议
+
+本项目基于 [MIT 许可证](LICENSE) 开源。

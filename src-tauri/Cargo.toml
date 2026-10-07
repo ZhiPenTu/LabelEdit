@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "LabelEdit Desktop Application"
 authors = ["LabelEdit Team"]
 edition = "2021"
+license = "MIT"
 
 [lib]
 name = "label_edit_lib"

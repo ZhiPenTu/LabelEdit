@@ -13,11 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-          - platform: 'windows-latest'
-            args: ''
+        platform: ['macos-latest', 'windows-latest']
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -77,4 +73,3 @@ jobs:
           releaseBody: 'LabelEdit 跨平台桌面客户端发布。包含 macOS (Apple Silicon) 与 Windows 安装包。'
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
