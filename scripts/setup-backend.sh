@@ -26,7 +26,7 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 
 .venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 12), ".venv 必须使用 Python 3.12，请重建虚拟环境"'
-.venv/bin/python -m pip install --no-cache-dir -r requirements.txt
+.venv/bin/python -m pip install --no-cache-dir -r requirements-dev.txt
 .venv/bin/python -m backend.ocr_service
 .venv/bin/python -m pip check
 echo "后端依赖和 OCR 模型已就绪。后续识别在本机离线运行。"

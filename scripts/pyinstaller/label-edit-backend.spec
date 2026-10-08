@@ -14,7 +14,10 @@ binaries = []
 
 for pkg in ["pypdfium2", "pypdfium2_raw", "onnxruntime", "cv2", "rapidocr", "reportlab"]:
     try:
-        datas.extend(collect_data_files(pkg))
+        # Explicit PP-OCRv5 models are bundled above. RapidOCR's defaults are
+        # different models and are never used by our configured engines.
+        excluded = ["models/**"] if pkg == "rapidocr" else ["datasets/**"] if pkg == "onnxruntime" else []
+        datas.extend(collect_data_files(pkg, excludes=excluded + ["**/tests/**", "**/test/**", "**/__pycache__/**"]))
     except Exception:
         pass
     try:
@@ -64,7 +67,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "scipy", "pytest"],
+    excludes=["tkinter", "matplotlib", "scipy", "pytest", "_pytest"],
     noarchive=False,
     optimize=0,
 )

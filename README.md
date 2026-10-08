@@ -77,6 +77,12 @@ bash scripts/dev.sh
 
 ---
 
+## 依赖与打包
+
+`requirements.txt` 仅包含运行依赖；开发与测试使用 `requirements-dev.txt`，打包使用 `requirements-build.txt`。macOS、Windows 和 CI 统一通过 `scripts/build_backend.py` 在独立的 `.venv-packaging` 中打包，保留四个离线 OCR 模型与完整字体，排除 OCR 默认模型和示例数据。
+
+`.github/workflows/validate.yml` 只执行构建、测试与断网冒烟，不发布版本。正式发行仍使用 tag 触发的发布流程。
+
 ## 技术与架构
 
 - **桌面宿主**：Tauri v2，提供轻量跨平台窗口、动态端口适配、防孤儿进程保护以及自动更新集成。
@@ -90,7 +96,8 @@ bash scripts/dev.sh
 ## 验证与测试
 
 ```bash
-# 验证前端编译
+# 验证前端状态、交互与编译
+npm run test
 npm run build
 
 # 验证后端单元测试

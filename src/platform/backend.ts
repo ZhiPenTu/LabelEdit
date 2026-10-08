@@ -1,18 +1,16 @@
 import { isTauri, invoke } from '@tauri-apps/api/core';
 
 let cachedBaseUrl: string | null = null;
+let pendingBase: Promise<string> | null = null;
 
 export async function getApiBase(): Promise<string> {
   if (cachedBaseUrl !== null) return cachedBaseUrl;
   if (isTauri()) {
-    try {
-      const url = await invoke<string>('get_backend_url');
+    pendingBase ??= invoke<string>('get_backend_url').then(url => {
       cachedBaseUrl = url.replace(/\/+$/, '');
       return cachedBaseUrl;
-    } catch {
-      cachedBaseUrl = 'http://127.0.0.1:8765';
-      return cachedBaseUrl;
-    }
+    }).finally(() => { pendingBase = null; });
+    return pendingBase;
   }
   cachedBaseUrl = '';
   return cachedBaseUrl;
@@ -25,8 +23,8 @@ export function getSyncApiBase(): string {
 }
 
 export async function checkBackendHealth(): Promise<{ ready: boolean; error?: string }> {
-  const base = await getApiBase();
   try {
+    const base = await getApiBase();
     const res = await fetch(`${base}/api/health`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
     if (!res.ok) return { ready: false, error: `服务状态异常（${res.status}）` };
     const data = await res.json();

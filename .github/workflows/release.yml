@@ -44,26 +44,11 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pyinstaller
-
-      - name: Prepare and verify offline OCR models
-        run: |
-          python -m backend.ocr_service
-
-      - name: Build standalone Python backend
-        shell: bash
-        run: |
-          mkdir -p src-tauri/resources
-          python -m PyInstaller --noconfirm --distpath src-tauri/resources/backend scripts/pyinstaller/label-edit-backend.spec
+      - name: Build standalone backend with pinned dependencies
+        run: python scripts/build_backend.py
 
       - name: Install Node dependencies
         run: npm ci
-
-      - name: Build frontend
-        run: npm run build
 
       - name: Build desktop app with Tauri Action
         uses: tauri-apps/tauri-action@v0
