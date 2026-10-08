@@ -26,7 +26,7 @@ export function Header({ filename, busy, exporting, onOpen, onExport, onCheckUpd
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {onCheckUpdates ? <IconAction label="检查更新" onClick={onCheckUpdates}><RefreshCw /></IconAction> : null}
+      {onCheckUpdates ? <IconAction label="版本与更新" onClick={onCheckUpdates}><RefreshCw /></IconAction> : null}
       <Button variant="outline" onClick={onOpen} disabled={busy}><FileUp data-icon="inline-start" />打开 PDF</Button>
       <Button onClick={onExport} disabled={!filename || busy}>
         {exporting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <Download data-icon="inline-start" />}{exporting ? '正在导出' : '导出 PDF'}
