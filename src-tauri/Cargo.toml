@@ -1,6 +1,6 @@
 [package]
 name = "label-edit"
-version = "0.1.4"
+version = "0.1.5"
 description = "LabelEdit Desktop Application"
 authors = ["LabelEdit Team"]
 edition = "2021"

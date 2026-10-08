@@ -30,6 +30,23 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
+      - name: Read latest release notes
+        id: release-notes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import uuid
+          from pathlib import Path
+
+          notes = Path("RELEASE_NOTES.md").read_text(encoding="utf-8").strip()
+          if not notes:
+              raise SystemExit("RELEASE_NOTES.md must describe the latest release")
+          delimiter = f"release_notes_{uuid.uuid4().hex}"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"body<<{delimiter}\n{notes}\n{delimiter}\n")
+          PY
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -59,6 +76,6 @@ jobs:
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v__VERSION__' }}
           releaseName: 'LabelEdit v__VERSION__'
-          releaseBody: 'LabelEdit 跨平台桌面客户端发布。包含 macOS (Apple Silicon) 与 Windows 安装包。'
+          releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: false
           prerelease: false

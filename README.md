@@ -46,7 +46,9 @@ scripts\build-desktop-windows.bat
 1. 本地生成或指定版本 tag：`git tag v0.1.0 && git push origin v0.1.0`。
 2. GitHub CI 自动并行启动 `macos-latest` 与 `windows-latest` 虚拟机，编译独立离线后端、前端和桌面端壳。
 3. 自动生成并签署更新清单 `latest.json`，并将 macOS `.dmg`、`.app.tar.gz` 和 Windows NSIS `.exe` 发布到 GitHub Releases。
-4. 运行中的桌面端启动时将在后台静默检测，有新版本时弹出更新提示并支持一键下载、安装与重启。
+4. 运行中的桌面端启动时将在后台静默检测，有新版本时弹出更新提示，展示该版本的变更日志，并支持一键下载、安装与重启。
+
+每次发布前，将 `RELEASE_NOTES.md` 替换为最新版本的更新说明（支持 Markdown 标题、列表和重点文字）。发布流程会将同一份内容写入 GitHub Release 和 `latest.json` 的 `notes` 字段。客户端只展示检测到的最新版本说明；此文件也只维护最新一版的内容。
 
 *注：GitHub 仓库需在 Settings -> Secrets and variables -> Actions 中配置 `TAURI_SIGNING_PRIVATE_KEY`（对应 `src-tauri/updater.key` 内容）以启用更新包数字签名。*
 

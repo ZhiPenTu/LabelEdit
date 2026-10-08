@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Cpu, Download, FileText, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
@@ -5,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from "./ui/progress";
 import { cn } from "cn";
 import type { AppUpdater } from "../platform/useAppUpdater";
+
+const ReleaseNotes = lazy(() => import("./ReleaseNotes"));
 
 export function UpdateNotifier({ updater }: { updater: AppUpdater }) {
   const {
@@ -37,7 +40,7 @@ export function UpdateNotifier({ updater }: { updater: AppUpdater }) {
 
   return (
     <Dialog open={visible} onOpenChange={open => { if (status !== "downloading") setVisible(open); }}>
-      <DialogContent className="sm:max-w-lg" showCloseButton={status !== "downloading"}>
+      <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto" showCloseButton={status !== "downloading"}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{desc}</DialogDescription>
@@ -73,6 +76,27 @@ export function UpdateNotifier({ updater }: { updater: AppUpdater }) {
             </div>
           </div>
         </div>
+
+        {update ? (
+          <section className="rounded-xl border bg-muted/30 p-3.5 flex flex-col gap-2.5" aria-labelledby="release-notes-title">
+            <div className="flex items-center justify-between gap-2">
+              <h3 id="release-notes-title" className="flex items-center gap-1.5 text-xs font-medium">
+                <FileText className="size-3.5 text-primary" aria-hidden="true" />
+                新版本变更日志
+              </h3>
+              <span className="text-xs font-mono text-muted-foreground">v{update.version}</span>
+            </div>
+            <div className="update-notes" role="region" aria-label={`v${update.version} 变更内容`} tabIndex={0}>
+              {update.body?.trim() ? (
+                <Suspense fallback={<p className="whitespace-pre-wrap">{update.body}</p>}>
+                  <ReleaseNotes body={update.body} />
+                </Suspense>
+              ) : (
+                <p>此版本暂未提供变更日志。</p>
+              )}
+            </div>
+          </section>
+        ) : null}
 
         {/* 底层引擎技术规格（用户明确要求的 OCR 引擎与 PDF 引擎版本） */}
         <div className="rounded-xl border bg-muted/30 p-3.5 flex flex-col gap-2.5 text-xs" data-testid="engine-specs">
@@ -129,16 +153,6 @@ export function UpdateNotifier({ updater }: { updater: AppUpdater }) {
               <span>{progress}%</span>
             </div>
             <Progress value={progress} aria-label="更新下载进度" />
-          </div>
-        ) : null}
-
-        {/* 更新日志 */}
-        {update && (status === "idle" || status === "downloading") ? (
-          <div className="flex flex-col gap-1.5">
-            <div className="text-xs font-medium text-foreground">更新日志 (v{update.version})</div>
-            <div className="update-notes p-2.5 rounded-lg border bg-muted/20 text-xs text-muted-foreground max-h-24 overflow-y-auto">
-              {update.body || "优化性能与体验改进。"}
-            </div>
           </div>
         ) : null}
 

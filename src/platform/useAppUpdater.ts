@@ -19,8 +19,8 @@ export function useAppUpdater() {
   const [status, setStatus] = useState<"idle" | "checking" | "downloading" | "upToDate" | "error">("idle");
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [currentVersion, setCurrentVersion] = useState("0.1.4");
-  const [latestVersion, setLatestVersion] = useState("0.1.4");
+  const [currentVersion, setCurrentVersion] = useState("0.1.5");
+  const [latestVersion, setLatestVersion] = useState("0.1.5");
   const [systemInfo, setSystemInfo] = useState<SystemInfo>(DEFAULT_SYSTEM_INFO);
   const [autoCheckEnabled, setAutoCheckEnabledState] = useState(readAutoCheckPreference);
 
@@ -107,7 +107,7 @@ export function useAppUpdater() {
       import("@tauri-apps/api/app").then(({ getVersion }) => getVersion()).then(v => {
         if (mounted.current && v) {
           setCurrentVersion(v);
-          setLatestVersion(prev => (prev === "0.1.4" ? v : prev));
+          setLatestVersion(prev => (prev === "0.1.5" ? v : prev));
         }
       }).catch(() => {});
     }
