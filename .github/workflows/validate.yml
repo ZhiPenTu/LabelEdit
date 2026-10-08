@@ -32,10 +32,12 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
       - name: Install development dependencies
+        shell: bash
         run: |
           python -m pip install -r requirements-dev.txt
           npm ci
       - name: Prepare offline models and test source
+        shell: bash
         run: |
           python -m backend.ocr_service
           python -m pytest -q
