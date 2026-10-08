@@ -84,6 +84,8 @@ bash scripts/dev.sh
 
 `.github/workflows/validate.yml` 只执行构建、测试与断网冒烟，不发布版本。正式发行仍使用 tag 触发的发布流程。
 
+整理与 UI 迁移的[实测体积、回归流程和界面截图](docs/cleanup-validation.md)。
+
 ## 技术与架构
 
 - **桌面宿主**：Tauri v2，提供轻量跨平台窗口、动态端口适配、防孤儿进程保护以及自动更新集成。
