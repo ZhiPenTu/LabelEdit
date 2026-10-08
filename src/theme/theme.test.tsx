@@ -1,0 +1,30 @@
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { ThemeProvider, useTheme } from './ThemeProvider';
+import { readTheme, THEME_KEY } from './theme';
+afterEach(() => { cleanup(); localStorage.clear(); document.documentElement.classList.remove('dark'); vi.restoreAllMocks(); });
+it('follows system changes and persists an explicit preference', () => {
+  let listener!: () => void;
+  const media = { matches: false, addEventListener: vi.fn((_name, cb) => { listener = cb; }), removeEventListener: vi.fn() };
+  window.matchMedia = vi.fn().mockReturnValue(media);
+  const { result, unmount } = renderHook(useTheme, { wrapper: ThemeProvider });
+  expect(result.current.theme).toBe('system');
+  media.matches = true;
+  act(() => listener());
+  expect(document.documentElement.classList.contains('dark')).toBe(true);
+  act(() => result.current.setTheme('light'));
+  expect(localStorage.getItem(THEME_KEY)).toBe('light');
+  expect(document.documentElement.classList.contains('dark')).toBe(false);
+  media.matches = true;
+  act(() => listener());
+  expect(document.documentElement.classList.contains('dark')).toBe(false);
+  unmount();
+  expect(media.removeEventListener).toHaveBeenCalled();
+  expect(readTheme()).toBe('light');
+});
+it('ignores invalid saved values and handles unavailable storage', () => {
+  localStorage.setItem(THEME_KEY, 'invalid');
+  expect(readTheme()).toBe('system');
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
+  expect(readTheme()).toBe('system');
+});

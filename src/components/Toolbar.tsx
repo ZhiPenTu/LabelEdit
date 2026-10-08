@@ -1,35 +1,31 @@
-import { Eye, EyeOff, Minus, MousePointer2, Plus, Scan, Undo2 } from 'lucide-react';
-import type { Editor } from '../useEditor';
-
-export type Tool = 'select' | 'region';
-interface ToolbarProps {
-  editor: Editor;
-  tool: Tool;
-  setTool: (tool: Tool) => void;
-  showRegions: boolean;
-  setShowRegions: (show: boolean) => void;
-  zoom: number;
-  setZoom: (zoom: number) => void;
-}
-
-export function Toolbar({ editor, tool, setTool, showRegions, setShowRegions, zoom, setZoom }: ToolbarProps) {
-  const busy = Boolean(editor.operation || editor.previewLoading);
-  const page = editor.document?.pages[editor.page];
-  const format = (value: number) => Number(value.toFixed(1)).toString();
-  return <div className="toolbar">
+import { Eye, Minus, MousePointer2, PanelLeft, PanelRight, Plus, Scan, Undo2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Separator } from '@/components/ui/separator';
+import { IconAction } from './IconAction';
+import type { PageInfo, Tool } from '../editor/types';
+export type { Tool } from '../editor/types';
+interface ToolbarProps { page: PageInfo; busy: boolean; canUndo: boolean; onUndo: () => void; tool: Tool; setTool: (tool: Tool) => void; showRegions: boolean; setShowRegions: (show: boolean) => void; zoom: number; setZoom: (zoom: number) => void; narrow: boolean; onShowRegions: () => void; onShowInspector: () => void }
+export function Toolbar({ page, busy, canUndo, onUndo, tool, setTool, showRegions, setShowRegions, zoom, setZoom, narrow, onShowRegions, onShowInspector }: ToolbarProps) {
+  return <div className="toolbar" aria-label="编辑工具">
     <div className="tool-group">
-      <button className={`tool-button ${tool === 'select' ? 'active' : ''}`} onClick={() => setTool('select')} disabled={!editor.document || busy} aria-pressed={tool === 'select'}><MousePointer2 size={22} />选择文字</button>
-      <button className={`tool-button ${tool === 'region' ? 'active' : ''}`} onClick={() => setTool('region')} disabled={!editor.document || busy} aria-pressed={tool === 'region'}><Scan size={22} />框选区域</button>
-      <button className={`tool-button region-toggle ${showRegions ? '' : 'muted'}`} onClick={() => setShowRegions(!showRegions)} disabled={!editor.document} aria-pressed={showRegions}>{showRegions ? <Eye size={23} /> : <EyeOff size={23} />}<span>显示识别框</span></button>
+      {narrow ? <IconAction label="打开文字列表" onClick={onShowRegions}><PanelLeft /></IconAction> : null}
+      <ToggleGroup value={[tool]} onValueChange={values => { if (values[0]) setTool(values[0] as Tool); }} disabled={busy} aria-label="编辑工具选择">
+        <ToggleGroupItem value="select"><MousePointer2 /><span>选择文字</span></ToggleGroupItem>
+        <ToggleGroupItem value="region"><Scan /><span>框选区域</span></ToggleGroupItem>
+      </ToggleGroup>
+      <Toggle aria-label="显示识别框" pressed={showRegions} onPressedChange={setShowRegions}><Eye /><span className="region-toggle-label">识别框</span></Toggle>
     </div>
     <div className="zoom-controls">
-      <button className="icon-button" aria-label="缩小" onClick={() => setZoom(Math.max(50, zoom - 25))} disabled={!editor.document || zoom <= 50}><Minus size={19} /></button>
-      <button className="zoom-reset" onClick={() => setZoom(100)} disabled={!editor.document} title="恢复适合页面的大小">{zoom}%</button>
-      <button className="icon-button" aria-label="放大" onClick={() => setZoom(Math.min(300, zoom + 25))} disabled={!editor.document || zoom >= 300}><Plus size={20} /></button>
+      <IconAction label="缩小" disabled={zoom <= 50} onClick={() => setZoom(Math.max(50, zoom - 25))}><Minus /></IconAction>
+      <Button variant="ghost" size="sm" onClick={() => setZoom(100)} aria-label="恢复缩放">{zoom}%</Button>
+      <IconAction label="放大" disabled={zoom >= 300} onClick={() => setZoom(Math.min(300, zoom + 25))}><Plus /></IconAction>
     </div>
     <div className="toolbar-meta">
-      <button className="icon-button toolbar-undo" aria-label="撤销" title="撤销上一次修改" onClick={() => void editor.undo()} disabled={!editor.canUndo || busy}><Undo2 size={19} /></button>
-      <span>{page ? `${format(page.width_mm)} × ${format(page.height_mm)} mm` : '保留原稿尺寸'}</span>
+      <IconAction label="撤销" disabled={!canUndo || busy} onClick={onUndo}><Undo2 /></IconAction>
+      {!narrow ? <><Separator orientation="vertical" className="h-4" /><span>{Number(page.width_mm.toFixed(1))} × {Number(page.height_mm.toFixed(1))} mm</span></> : null}
+      {narrow ? <IconAction label="打开编辑面板" onClick={onShowInspector}><PanelRight /></IconAction> : null}
     </div>
   </div>;
 }

@@ -1,42 +1,11 @@
-import { LoaderCircle, RefreshCw, AlertTriangle } from 'lucide-react';
+import { LoaderCircle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useBackendStatus } from '../platform/useBackendStatus';
-
 export function BackendLoadingOverlay() {
   const { ready, error, retry } = useBackendStatus();
-  if (ready) return null;
-
-  return (
-    <div className="backend-overlay" role="dialog" aria-modal="true" aria-label="服务启动状态">
-      <div className="backend-card">
-        {error ? (
-          <>
-            <div className="status-icon error">
-              <AlertTriangle size={36} />
-            </div>
-            <h3>本地引擎未响应</h3>
-            <p className="error-desc">{error}</p>
-            <button
-              className="button button-primary"
-              onClick={retry}
-            >
-              <RefreshCw size={16} /> 重新连接
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="status-icon loading">
-              <LoaderCircle className="spinning" size={38} />
-            </div>
-            <h3>正在初始化本地离线引擎</h3>
-            <p>正在加载 PP-OCR 深度学习模型与 PDFium 渲染核心...</p>
-            <div className="engine-meta">
-              <span>完全离线运行</span>
-              <span>•</span>
-              <span>数据仅存本机</span>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
+  return <Dialog open={!ready}><DialogContent showCloseButton={false}>
+    <DialogHeader><DialogTitle>{error ? '本地引擎未响应' : '正在初始化本地离线引擎'}</DialogTitle><DialogDescription>{error || '正在连接 OCR 与 PDF 渲染服务，文件仅在本机处理。'}</DialogDescription></DialogHeader>
+    {error ? <Button onClick={retry}><RefreshCw data-icon="inline-start" />重新连接</Button> : <div className="flex items-center gap-3 text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />正在连接…</div>}
+  </DialogContent></Dialog>;
 }

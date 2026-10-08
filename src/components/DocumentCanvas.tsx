@@ -5,8 +5,11 @@ import type { Rect, Tool } from '../editor/types';
 import { rectangle } from '../editor/geometry';
 import { useCanvasInteractions } from '../editor/useCanvasInteractions';
 import type { Editor } from '../useEditor';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-interface CanvasProps { editor: Editor; tool: Tool; showRegions: boolean; zoom: number }
+export type CanvasModel = Pick<Editor, 'document' | 'page' | 'regions' | 'edits' | 'selectedId' | 'selectedRegion' | 'previewUrl' | 'previewLoading' | 'operation' | 'recognition' | 'select' | 'updateRegionRect' | 'addManualRegion' | 'changePage' | 'imageFailed'>;
+interface CanvasProps { editor: CanvasModel; tool: Tool; showRegions: boolean; zoom: number }
 const rectStyle = (rect: Rect): CSSProperties => ({ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` });
 
 export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps) {
@@ -54,15 +57,15 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
   };
 
   return <section className="canvas-column" aria-label="PDF 页面预览">
-    <div className="canvas-viewport" ref={viewportRef}>
-      {editor.edits.some(edit => edit.page === editor.page) ? <button className={`compare-button ${compareOriginal ? 'active' : ''}`} onClick={() => setCompareOriginal(!compareOriginal)} disabled={busy}>
+      {editor.edits.some(edit => edit.page === editor.page) ? <Button variant="outline" size="sm" className="compare-button" onClick={() => setCompareOriginal(!compareOriginal)} disabled={busy}>
         {compareOriginal ? '返回修改预览' : '查看原稿'}
-      </button> : null}
+      </Button> : null}
+    <div className="canvas-viewport" ref={viewportRef}>
       <div className="canvas-layout" style={{
         minWidth: zoom > 100 ? width + 68 : undefined,
         minHeight: zoom > 100 ? height + 68 : undefined,
       }}>
-        <div ref={documentRef} tabIndex={0} aria-label="PDF 画布" data-editor-canvas className={`document-page ${tool === 'region' ? 'drawing' : ''} ${busy ? 'is-busy' : ''}`}
+        <div ref={documentRef} tabIndex={0} aria-label="PDF 画布" data-editor-canvas className={cn('document-page', tool === 'region' && 'drawing', busy && 'is-busy')}
           style={{ width, height, cursor: getTransformCursor() }} onPointerDown={pointerDown}
           onPointerMove={event => { if (drag) setDrag(previous => previous ? { ...previous, end: (() => { const bounds = documentRef.current!.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)), y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)) }; })() } : null); }}
           onPointerUp={pointerUp} onPointerCancel={() => setDrag(null)}>
@@ -72,9 +75,9 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
             if (!selected && !showRegions) return null;
             const isTransforming = activeTransform?.id === region.id;
             const displayRect = isTransforming ? activeTransform.currentRect : region.rect;
-            return <button key={region.id} type="button" className={`text-region ${selected ? 'selected' : ''} ${isTransforming ? 'is-transforming' : ''} ${editor.edits.some(edit => edit.id === region.id) ? 'modified' : ''}`}
+            return <button key={region.id} type="button" className={cn('text-region', selected && 'selected', isTransforming && 'is-transforming', editor.edits.some(edit => edit.id === region.id) && 'modified')}
               style={rectStyle(displayRect)} aria-label={`选择文字：${region.text || '手动框选区域'}`} title={region.text || '手动框选区域'}
-              disabled={busy || tool === 'region'} onPointerDown={event => startTransform(event, 'move', region)} onClick={() => editor.select(region.id)}>
+              aria-pressed={selected} disabled={busy || tool === 'region'} onPointerDown={event => startTransform(event, 'move', region)} onClick={() => editor.select(region.id)}>
               {selected ? <>
                 <i className="handle top-left" aria-hidden="true" onPointerDown={event => startTransform(event, 'nw', region)} />
                 <i className="handle top-right" aria-hidden="true" onPointerDown={event => startTransform(event, 'ne', region)} />
@@ -90,9 +93,9 @@ export function DocumentCanvas({ editor, tool, showRegions, zoom }: CanvasProps)
     </div>
     <footer className="canvas-status">
       <div className="page-controls">
-        {editor.document!.page_count > 1 ? <button className="icon-button" aria-label="上一页" disabled={busy || editor.page === 0} onClick={() => void editor.changePage(editor.page - 1)}><ChevronLeft size={18} /></button> : null}
+        {editor.document!.page_count > 1 ? <Button variant="ghost" size="icon" aria-label="上一页" disabled={busy || editor.page === 0} onClick={() => void editor.changePage(editor.page - 1)}><ChevronLeft /></Button> : null}
         <span>第 {editor.page + 1} 页 / 共 {editor.document!.page_count} 页</span>
-        {editor.document!.page_count > 1 ? <button className="icon-button" aria-label="下一页" disabled={busy || editor.page + 1 >= editor.document!.page_count} onClick={() => void editor.changePage(editor.page + 1)}><ChevronRight size={18} /></button> : null}
+        {editor.document!.page_count > 1 ? <Button variant="ghost" size="icon" aria-label="下一页" disabled={busy || editor.page + 1 >= editor.document!.page_count} onClick={() => void editor.changePage(editor.page + 1)}><ChevronRight /></Button> : null}
       </div>
       <div className="recognition-status">
         {editor.operation === 'recognizing' ? <><LoaderCircle className="spinning" size={19} /><span>正在识别文字</span></> :
