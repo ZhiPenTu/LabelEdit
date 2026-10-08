@@ -1,359 +1,247 @@
-import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage, type Language, type PDFDocument, type Recognition, type Rect, type TextEdit, type TextRegion } from './api';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { api, errorMessage } from './api';
+import { editorReducer, initialEditorState, isBusy, snapshotOf, type EditorAction, type EditSnapshot } from './editor/state';
+import { acceptsEditorShortcut } from './editor/shortcuts';
+import { usePreviewResources } from './editor/usePreviewResources';
+import type { PDFDocument, TextEdit, Language, Rect, TextRegion } from './editor/types';
 
-type Operation = 'opening' | 'recognizing' | 'applying' | 'exporting' | null;
-
-function overlaps(first: Rect, second: Rect): boolean {
-  const width = Math.max(0, Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x));
-  const height = Math.max(0, Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y));
-  return width * height > Math.min(first.width * first.height, second.width * second.height) * 0.65;
-}
+interface PendingMove { documentId: string; page: number; snapshot: EditSnapshot }
 
 export function useEditor() {
-  const [document, setDocument] = useState<PDFDocument | null>(null);
-  const [page, setPage] = useState(0);
-  const [regionsByPage, setRegionsByPage] = useState<Record<number, TextRegion[]>>({});
-  const [recognitionByPage, setRecognitionByPage] = useState<Record<number, Recognition>>({});
-  const [edits, setEdits] = useState<TextEdit[]>([]);
-  const [history, setHistory] = useState<TextEdit[][]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [language, setLanguage] = useState<Language>('latin');
-  const [operation, setOperation] = useState<Operation>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [download, setDownload] = useState<{ url: string; filename: string } | null>(null);
-  const documentRef = useRef<PDFDocument | null>(null);
-  const imageRequest = useRef(0);
-  const openRequest = useRef(0);
-  const editsRef = useRef(edits);
-  const regionsRef = useRef(regionsByPage);
-  const nudgeTimerRef = useRef<number | null>(null);
-  const pendingEditsRef = useRef<TextEdit[] | null>(null);
-  const historySnapshotRef = useRef<TextEdit[] | null>(null);
-  editsRef.current = edits;
-  regionsRef.current = regionsByPage;
+  const [state, dispatch] = useReducer(editorReducer, initialEditorState);
+  const current = useRef(state);
+  current.current = state;
+  // Keep actions coherent even when React batches repeated keyboard/pointer events.
+  const send = useCallback((action: EditorAction) => {
+    current.current = editorReducer(current.current, action);
+    dispatch(action);
+  }, []);
+  const { request: previewFor, invalidate: invalidatePreview } = usePreviewResources(state.previewUrl);
+  const openGeneration = useRef(0);
+  const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMove = useRef<PendingMove | null>(null);
+  const clearMoveTimer = useCallback(() => {
+    if (moveTimer.current !== null) clearTimeout(moveTimer.current);
+    moveTimer.current = null;
+  }, []);
+  const isCurrent = (id: string, generation: number) => current.current.document?.id === id && openGeneration.current === generation;
 
   useEffect(() => () => {
-    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-    if (nudgeTimerRef.current) window.clearTimeout(nudgeTimerRef.current);
-  }, [previewUrl]);
+    ++openGeneration.current;
+    clearMoveTimer();
+    pendingMove.current = null;
+    const doc = current.current.document;
+    if (doc) void api.close(doc.id).catch(() => {});
+  }, [clearMoveTimer]);
 
-  useEffect(() => {
-    const handleUndo = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey &&
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) && !target.isContentEditable) {
-        event.preventDefault();
-        if (history.length && !operation && !previewLoading) void undo();
-      }
-    };
-    window.addEventListener('keydown', handleUndo);
-    return () => window.removeEventListener('keydown', handleUndo);
-  });
-
-  async function recognizeDocument(doc: PDFDocument, targetPage: number, targetLanguage: Language) {
-    setOperation('recognizing');
+  async function recognizeDocument(doc: PDFDocument, page: number, language: Language, generation = openGeneration.current) {
+    send({ type: 'patch', patch: { operation: 'recognizing' } });
     try {
-      const result = await api.recognize(doc.id, targetPage, targetLanguage);
-      if (documentRef.current?.id !== doc.id) return;
-      // Detection index IDs may change between language models. Give each run its
-      // own IDs and keep edited boxes so an existing edit can never move silently.
-      const batch = crypto.randomUUID();
-      const detected = result.regions.map(region => ({ ...region, id: `${batch}:${region.id}` }));
-      const editedIds = new Set(editsRef.current.map(edit => edit.id));
-      const preserved = (regionsRef.current[targetPage] ?? []).filter(region => region.source === 'manual' || editedIds.has(region.id));
-      const fresh = detected.filter(region => !preserved.some(old => old.source !== 'manual' && overlaps(region.rect, old.rect)));
-      const nextRegions = [...fresh, ...preserved];
-      setRegionsByPage(previous => ({ ...previous, [targetPage]: nextRegions }));
-      setRecognitionByPage(previous => ({ ...previous, [targetPage]: result }));
-      setSelectedId(previous => nextRegions.some(region => region.id === previous) ? previous : nextRegions[0]?.id ?? null);
-      if (!result.regions.length) setNotice('未识别到文字。可以使用「框选区域」手动添加修改。');
-      else if (result.warnings?.length) setNotice(result.warnings.join('；'));
-      else setNotice(null);
+      const result = await api.recognize(doc.id, page, language);
+      if (isCurrent(doc.id, generation)) send({ type: 'recognized', page, result, batch: crypto.randomUUID() });
     } catch (failure) {
-      if (documentRef.current?.id === doc.id) {
-        setError(`文字识别未完成：${errorMessage(failure)} 可使用「框选区域」手动修改。`);
-      }
+      if (isCurrent(doc.id, generation)) send({ type: 'patch', patch: { error: `文字识别未完成：${errorMessage(failure)} 可使用「框选区域」手动修改。` } });
     } finally {
-      if (documentRef.current?.id === doc.id) setOperation(null);
+      if (isCurrent(doc.id, generation)) send({ type: 'patch', patch: { operation: null } });
     }
   }
 
   async function open(loader: () => Promise<PDFDocument>) {
-    const request = ++openRequest.current;
-    setOperation('opening');
-    setError(null);
-    setNotice(null);
-    setDownload(null);
+    const generation = ++openGeneration.current;
+    clearMoveTimer();
+    if (pendingMove.current) send({ type: 'patch', patch: pendingMove.current.snapshot });
+    pendingMove.current = null;
+    invalidatePreview();
+    send({ type: 'patch', patch: { operation: 'opening', error: null, notice: null, download: null } });
     try {
       const doc = await loader();
-      if (request !== openRequest.current) return;
-      const previousDocument = documentRef.current;
-      documentRef.current = doc;
-      ++imageRequest.current;
-      setDocument(doc);
-      setPage(0);
-      setRegionsByPage({});
-      setRecognitionByPage({});
-      setEdits([]);
-      setHistory([]);
-      setSelectedId(null);
-      setPreviewUrl(api.imageUrl(doc.id, 0));
-      setPreviewLoading(false);
-      if (previousDocument && previousDocument.id !== doc.id) {
-        void api.close(previousDocument.id).catch(() => { /* A cleanup failure must not interrupt the newly opened document. */ });
+      if (generation !== openGeneration.current) {
+        if (current.current.document?.id !== doc.id) void api.close(doc.id).catch(() => {});
+        return;
       }
-      await recognizeDocument(doc, 0, language);
+      const previous = current.current.document;
+      send({ type: 'opened', document: doc, previewUrl: api.imageUrl(doc.id, 0) });
+      if (previous && previous.id !== doc.id) void api.close(previous.id).catch(() => {});
+      await recognizeDocument(doc, 0, current.current.language, generation);
     } catch (failure) {
-      if (request === openRequest.current) {
-        setError(`PDF 打开失败：${errorMessage(failure)}`);
-        setOperation(null);
-      }
+      if (generation === openGeneration.current) send({ type: 'patch', patch: { error: `PDF 打开失败：${errorMessage(failure)}`, operation: null } });
     }
   }
 
   async function upload(file: File) {
     if (!/\.pdf$/i.test(file.name)) {
-      setError('请选择 PDF 文件。');
+      send({ type: 'patch', patch: { error: '请选择 PDF 文件。' } });
       return;
     }
     await open(() => api.upload(file));
   }
 
+  async function flushMoves(): Promise<boolean> {
+    clearMoveTimer();
+    const pending = pendingMove.current;
+    pendingMove.current = null;
+    if (!pending) return true;
+    const { document, edits } = current.current;
+    if (!document || pending.documentId !== document.id) return false;
+    const generation = openGeneration.current;
+    send({ type: 'patch', patch: { operation: 'applying', error: null } });
+    try {
+      const url = await previewFor(document, pending.page, edits);
+      if (!url || !isCurrent(document.id, generation)) return false;
+      send({ type: 'commit', edits, snapshot: pending.snapshot, previewUrl: url, notice: '文字位置已更新，预览与导出使用相同的排版。' });
+      return true;
+    } catch (failure) {
+      if (isCurrent(document.id, generation)) send({ type: 'patch', patch: { ...pending.snapshot, error: `位置更新未完成：${errorMessage(failure)}` } });
+      return false;
+    } finally {
+      if (isCurrent(document.id, generation)) send({ type: 'patch', patch: { operation: null } });
+    }
+  }
+
   async function recognize() {
-    if (!document || operation || previewLoading) return;
-    setError(null);
-    setNotice(null);
+    if (isBusy(current.current) || !await flushMoves()) return;
+    const { document, page, language } = current.current;
+    if (!document) return;
+    send({ type: 'patch', patch: { error: null, notice: null } });
     await recognizeDocument(document, page, language);
   }
 
-  async function previewFor(nextEdits: TextEdit[], targetPage = page): Promise<string | null> {
-    if (!document) return null;
-    const request = ++imageRequest.current;
-    const docId = document.id;
-    if (!nextEdits.some(edit => edit.page === targetPage)) return api.imageUrl(docId, targetPage);
-    const blob = await api.preview(docId, targetPage, nextEdits);
-    if (request !== imageRequest.current || documentRef.current?.id !== docId) return null;
-    return URL.createObjectURL(blob);
+  async function commitEdits(nextEdits: TextEdit[], notice: string, failurePrefix: string): Promise<boolean> {
+    const before = current.current;
+    if (!before.document || isBusy(before)) return false;
+    const generation = openGeneration.current;
+    send({ type: 'patch', patch: { operation: 'applying', error: null, notice: null } });
+    try {
+      const url = await previewFor(before.document, before.page, nextEdits);
+      if (!url || !isCurrent(before.document.id, generation)) return false;
+      send({ type: 'commit', edits: nextEdits, snapshot: snapshotOf(before), previewUrl: url, notice });
+      return true;
+    } catch (failure) {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { error: `${failurePrefix}：${errorMessage(failure)}` } });
+      return false;
+    } finally {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { operation: null } });
+    }
   }
 
   async function apply(edit: TextEdit) {
-    if (!document || operation || previewLoading) return false;
-    if (nudgeTimerRef.current) {
-      window.clearTimeout(nudgeTimerRef.current);
-      nudgeTimerRef.current = null;
-    }
-    pendingEditsRef.current = null;
-    historySnapshotRef.current = null;
-    setOperation('applying');
-    setError(null);
-    setNotice(null);
-    const nextEdits = [...edits.filter(item => item.id !== edit.id), edit];
-    try {
-      const url = await previewFor(nextEdits);
-      if (!url) return false;
-      setHistory(previous => [...previous, edits]);
-      setEdits(nextEdits);
-      setDownload(null);
-      setPreviewUrl(url);
-      setNotice('修改已应用，预览与导出使用相同的排版。');
-      return true;
-    } catch (failure) {
-      setError(`修改未应用：${errorMessage(failure)}`);
-      return false;
-    } finally { setOperation(null); }
+    if (isBusy(current.current) || !await flushMoves()) return false;
+    return commitEdits([...current.current.edits.filter(item => item.id !== edit.id), edit], '修改已应用，预览与导出使用相同的排版。', '修改未应用');
   }
 
   async function undo() {
-    if (!history.length || operation || previewLoading) return;
-    if (nudgeTimerRef.current) {
-      window.clearTimeout(nudgeTimerRef.current);
-      nudgeTimerRef.current = null;
-    }
-    pendingEditsRef.current = null;
-    historySnapshotRef.current = null;
-    setOperation('applying');
-    setError(null);
+    if (isBusy(current.current) || !await flushMoves()) return;
+    const before = current.current;
+    const previous = before.history.at(-1);
+    if (!before.document || !previous) return;
+    const generation = openGeneration.current;
+    send({ type: 'patch', patch: { operation: 'applying', error: null } });
     try {
-      const previous = history[history.length - 1];
-      const url = await previewFor(previous);
-      if (!url) return;
-      setEdits(previous);
-      setRegionsByPage(prev => {
-        const currentList = prev[page] ?? [];
-        let changed = false;
-        const nextList = currentList.map(region => {
-          const matchingEdit = previous.find(e => e.id === region.id && e.page === page);
-          if (matchingEdit && (
-            matchingEdit.rect.x !== region.rect.x ||
-            matchingEdit.rect.y !== region.rect.y ||
-            matchingEdit.rect.width !== region.rect.width ||
-            matchingEdit.rect.height !== region.rect.height
-          )) {
-            changed = true;
-            return { ...region, rect: matchingEdit.rect };
-          }
-          return region;
-        });
-        return changed ? { ...prev, [page]: nextList } : prev;
-      });
-      setDownload(null);
-      setHistory(items => items.slice(0, -1));
-      setPreviewUrl(url);
-      setNotice('已撤销上一次修改。');
-    } catch (failure) { setError(`撤销未完成：${errorMessage(failure)}`); }
-    finally { setOperation(null); }
+      const url = await previewFor(before.document, before.page, previous.edits);
+      if (url && isCurrent(before.document.id, generation)) send({ type: 'undo', snapshot: previous, previewUrl: url });
+    } catch (failure) {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { error: `撤销未完成：${errorMessage(failure)}` } });
+    } finally {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { operation: null } });
+    }
   }
 
   async function remove(id: string) {
-    if (operation || previewLoading) return;
-    if (nudgeTimerRef.current) {
-      window.clearTimeout(nudgeTimerRef.current);
-      nudgeTimerRef.current = null;
-    }
-    pendingEditsRef.current = null;
-    historySnapshotRef.current = null;
-    const hasEdit = edits.some(edit => edit.id === id);
-    if (!hasEdit) {
-      setRegionsByPage(previous => ({ ...previous, [page]: (previous[page] ?? []).filter(region => region.id !== id) }));
-      setSelectedId(null);
+    if (isBusy(current.current) || !await flushMoves()) return;
+    const before = current.current;
+    if (!before.edits.some(edit => edit.id === id)) {
+      send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: (before.regionsByPage[before.page] ?? []).filter(region => region.id !== id) }, selectedId: null, download: null } });
       return;
     }
-    setOperation('applying');
-    setError(null);
-    try {
-      const nextEdits = edits.filter(edit => edit.id !== id);
-      const url = await previewFor(nextEdits);
-      if (!url) return;
-      setHistory(previous => [...previous, edits]);
-      setEdits(nextEdits);
-      setDownload(null);
-      setPreviewUrl(url);
-      setNotice('已移除这项修改。');
-    } catch (failure) { setError(`移除未完成：${errorMessage(failure)}`); }
-    finally { setOperation(null); }
+    await commitEdits(before.edits.filter(edit => edit.id !== id), '已移除这项修改。', '移除未完成');
   }
 
-  async function changePage(nextPage: number) {
-    if (!document || operation || previewLoading || nextPage === page || nextPage < 0 || nextPage >= document.page_count) return;
-    setPage(nextPage);
-    setSelectedId(regionsByPage[nextPage]?.[0]?.id ?? null);
-    setPreviewUrl(api.imageUrl(document.id, nextPage));
-    setError(null);
-    setNotice(null);
-    setPreviewLoading(true);
+  async function changePage(page: number) {
+    if (isBusy(current.current) || !await flushMoves()) return;
+    const before = current.current;
+    if (!before.document || page === before.page || page < 0 || page >= before.document.page_count) return;
+    const doc = before.document;
+    const generation = openGeneration.current;
+    send({ type: 'patch', patch: { page, selectedId: before.regionsByPage[page]?.[0]?.id ?? null, previewUrl: api.imageUrl(doc.id, page), error: null, notice: null, previewLoading: true } });
     try {
-      const url = await previewFor(edits, nextPage);
-      if (url) setPreviewUrl(url);
-    } catch (failure) { setError(`页面预览未完成：${errorMessage(failure)}`); }
-    finally { setPreviewLoading(false); }
-    if (!recognitionByPage[nextPage]) await recognizeDocument(document, nextPage, language);
+      const url = await previewFor(doc, page, before.edits);
+      if (url && isCurrent(doc.id, generation)) send({ type: 'patch', patch: { previewUrl: url } });
+    } catch (failure) {
+      if (isCurrent(doc.id, generation)) send({ type: 'patch', patch: { error: `页面预览未完成：${errorMessage(failure)}` } });
+    } finally {
+      if (isCurrent(doc.id, generation)) send({ type: 'patch', patch: { previewLoading: false } });
+    }
+    if (isCurrent(doc.id, generation) && !current.current.recognitionByPage[page]) await recognizeDocument(doc, page, before.language, generation);
   }
 
   function addManualRegion(rect: Rect) {
-    if (!document || operation || previewLoading) return;
-    setDownload(null);
-    const id = `manual-${crypto.randomUUID()}`;
-    const region: TextRegion = {
-      id, page, rect, text: '', confidence: 1,
-      font_size: Math.max(1, Math.min(12, document.pages[page].height_pt * rect.height * 0.72)),
-      bold: false, source: 'manual',
-    };
-    setRegionsByPage(previous => ({ ...previous, [page]: [...(previous[page] ?? []), region] }));
-    setSelectedId(id);
-    setNotice('已框选区域，在右侧输入替换文字。留空可清除区域内容。');
+    const before = current.current;
+    if (!before.document || isBusy(before)) return;
+    const region: TextRegion = { id: `manual-${crypto.randomUUID()}`, page: before.page, rect, text: '', confidence: 1,
+      font_size: Math.max(1, Math.min(12, before.document.pages[before.page].height_pt * rect.height * 0.72)), bold: false, source: 'manual' };
+    send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: [...(before.regionsByPage[before.page] ?? []), region] }, selectedId: region.id, download: null,
+      notice: '已框选区域，在右侧输入替换文字。留空可清除区域内容。' } });
   }
 
-  async function updateRegionRect(id: string, rect: Rect) {
-    if (!document) return;
-    setRegionsByPage(previous => {
-      const currentList = previous[page] ?? [];
-      const index = currentList.findIndex(r => r.id === id);
-      if (index === -1) return previous;
-      const updated = [...currentList];
-      updated[index] = { ...updated[index], rect };
-      return { ...previous, [page]: updated };
-    });
-
-    const existingEdit = editsRef.current.find(edit => edit.id === id);
-    if (!existingEdit) return;
-
-    if (!historySnapshotRef.current) {
-      historySnapshotRef.current = editsRef.current;
+  function updateRegionRect(id: string, rect: Rect) {
+    const before = current.current;
+    if (!before.document || isBusy(before) || !(before.regionsByPage[before.page] ?? []).some(region => region.id === id)) return;
+    if (before.edits.some(edit => edit.id === id) && !pendingMove.current) pendingMove.current = { documentId: before.document.id, page: before.page, snapshot: snapshotOf(before) };
+    send({ type: 'rect', id, page: before.page, rect });
+    if (pendingMove.current) {
+      clearMoveTimer();
+      moveTimer.current = setTimeout(() => { void flushMoves(); }, 150);
     }
-
-    const updatedEdit = { ...existingEdit, rect };
-    const nextEdits = [...editsRef.current.filter(item => item.id !== id), updatedEdit];
-    setEdits(nextEdits);
-    pendingEditsRef.current = nextEdits;
-
-    if (nudgeTimerRef.current) {
-      window.clearTimeout(nudgeTimerRef.current);
-    }
-
-    nudgeTimerRef.current = window.setTimeout(async () => {
-      nudgeTimerRef.current = null;
-      const toApply = pendingEditsRef.current;
-      const snapshot = historySnapshotRef.current;
-      pendingEditsRef.current = null;
-      historySnapshotRef.current = null;
-      if (!toApply || !snapshot) return;
-
-      setOperation('applying');
-      setError(null);
-      try {
-        const url = await previewFor(toApply);
-        if (!url) return;
-        setHistory(previous => [...previous, snapshot]);
-        setPreviewUrl(url);
-        setDownload(null);
-        setNotice('文字位置已更新，预览与导出使用相同的排版。');
-      } catch (failure) {
-        setError(`位置更新未完成：${errorMessage(failure)}`);
-      } finally {
-        setOperation(null);
-      }
-    }, 150);
   }
 
   async function exportPDF() {
-    if (!document || operation || previewLoading) return;
-    setOperation('exporting');
-    setError(null);
-    setNotice(null);
-    setDownload(null);
+    if (isBusy(current.current) || !await flushMoves()) return;
+    const before = current.current;
+    if (!before.document) return;
+    const generation = openGeneration.current;
+    send({ type: 'patch', patch: { operation: 'exporting', error: null, notice: null, download: null } });
     try {
-      await api.export(document.id, edits);
-      const url = api.downloadUrl(document.id);
-      const filename = document.filename.replace(/\.pdf$/i, '') + ' - 已编辑.pdf';
-      setDownload({ url, filename });
+      await api.export(before.document.id, before.edits);
+      if (!isCurrent(before.document.id, generation)) return;
+      const url = api.downloadUrl(before.document.id);
+      const filename = before.document.filename.replace(/\.pdf$/i, '') + ' - 已编辑.pdf';
+      send({ type: 'patch', patch: { download: { url, filename }, notice: 'PDF 已生成。若下载未开始，可点击下方链接。' } });
       const anchor = window.document.createElement('a');
       anchor.href = url;
       anchor.download = filename;
       window.document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      setNotice('PDF 已生成。若下载未开始，可点击下方链接。');
-    } catch (failure) { setError(`PDF 导出失败：${errorMessage(failure)}`); }
-    finally { setOperation(null); }
+    } catch (failure) {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { error: `PDF 导出失败：${errorMessage(failure)}` } });
+    } finally {
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { operation: null } });
+    }
   }
 
-  const regions = regionsByPage[page] ?? [];
-  const selectedRegion = regions.find(region => region.id === selectedId) ?? null;
+  const undoRef = useRef(undo);
+  undoRef.current = undo;
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (acceptsEditorShortcut(event) && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        void undoRef.current();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
+  const regions = state.regionsByPage[state.page] ?? [];
   return {
-    document, page, regions, edits, selectedId, selectedRegion,
-    selectedEdit: edits.find(edit => edit.id === selectedId),
-    language, setLanguage, operation, previewUrl, previewLoading, error, notice, download,
-    recognition: recognitionByPage[page], canUndo: history.length > 0,
-    upload, openDemo: () => open(api.demo), recognize, select: setSelectedId,
-    apply, undo, remove, changePage, addManualRegion, exportPDF, updateRegionRect,
-    clearError: () => setError(null), clearNotice: () => setNotice(null),
-    invalidateDownload: () => { if (download) { setDownload(null); setNotice(null); } },
-    imageFailed: () => setError('页面图片加载失败，请重新打开 PDF 或检查本机服务。'),
+    ...state, regions, selectedRegion: regions.find(region => region.id === state.selectedId) ?? null,
+    selectedEdit: state.edits.find(edit => edit.id === state.selectedId), recognition: state.recognitionByPage[state.page], canUndo: state.history.length > 0,
+    busy: isBusy(state), upload, openDemo: () => open(api.demo), recognize, apply, undo, remove, changePage, addManualRegion, exportPDF, updateRegionRect,
+    select: (selectedId: string | null) => send({ type: 'patch', patch: { selectedId } }),
+    setLanguage: (language: Language) => send({ type: 'patch', patch: { language } }),
+    clearError: () => send({ type: 'patch', patch: { error: null } }), clearNotice: () => send({ type: 'patch', patch: { notice: null } }),
+    invalidateDownload: () => { if (current.current.download) send({ type: 'patch', patch: { download: null, notice: null } }); },
+    imageFailed: () => send({ type: 'patch', patch: { error: '页面图片加载失败，请重新打开 PDF 或检查本机服务。' } }),
   };
 }
-
 export type Editor = ReturnType<typeof useEditor>;

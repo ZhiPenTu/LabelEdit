@@ -1,106 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
-import { isTauri } from '@tauri-apps/api/core';
-import { check, type Update } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
 import { DownloadCloud, Sparkles, X, CheckCircle2, AlertCircle, LoaderCircle } from 'lucide-react';
+import type { AppUpdater } from '../platform/useAppUpdater';
 
-export function UpdateNotifier({ onManualCheckRef }: { onManualCheckRef?: (checkFn: () => void) => void }) {
-  const [update, setUpdate] = useState<Update | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'checking' | 'downloading' | 'upToDate' | 'error'>('idle');
-  const [progress, setProgress] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const performCheck = useCallback(async (silent = false) => {
-    if (!isTauri()) {
-      if (!silent) {
-        setStatus('error');
-        setErrorMessage('当前为网页模式，桌面客户端支持完整的自动检测与静默升级。');
-        setVisible(true);
-      }
-      return;
-    }
-
-    try {
-      if (!silent) setStatus('checking');
-      const found = await check();
-      if (found) {
-        setUpdate(found);
-        setStatus('idle');
-        setVisible(true);
-      } else if (!silent) {
-        setStatus('upToDate');
-        setVisible(true);
-      }
-    } catch (err) {
-      if (!silent) {
-        const rawMessage = err instanceof Error ? err.message : (typeof err === 'string' ? err : String(err ?? ''));
-        // If the platform/target has no separate update entry in the release manifest,
-        // it means there is no newer update package available for the current platform.
-        if (
-          rawMessage.includes('was not found in the response') ||
-          rawMessage.toLowerCase().includes('targetnotfound') ||
-          rawMessage.toLowerCase().includes('targetsnotfound')
-        ) {
-          setStatus('upToDate');
-          setVisible(true);
-          return;
-        }
-
-        setStatus('error');
-        setErrorMessage(
-          rawMessage.includes('Failed to fetch') ||
-          rawMessage.includes('dns') ||
-          rawMessage.includes('network') ||
-          rawMessage.includes('timeout')
-            ? '检查更新失败，请确认网络连接。'
-            : (rawMessage || '检查更新失败，请确认网络连接。')
-        );
-        setVisible(true);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (onManualCheckRef) {
-      onManualCheckRef(() => void performCheck(false));
-    }
-  }, [onManualCheckRef, performCheck]);
-
-  useEffect(() => {
-    // Check quietly in the background 3 seconds after launch
-    const timer = setTimeout(() => {
-      void performCheck(true);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [performCheck]);
-
-  async function handleDownloadAndInstall() {
-    if (!update) return;
-    setStatus('downloading');
-    setProgress(0);
-    setErrorMessage(null);
-
-    try {
-      let downloaded = 0;
-      let totalLength = 0;
-      await update.downloadAndInstall((event) => {
-        if (event.event === 'Started') {
-          totalLength = event.data.contentLength || 0;
-        } else if (event.event === 'Progress') {
-          downloaded += event.data.chunkLength;
-          if (totalLength > 0) {
-            setProgress(Math.min(100, Math.round((downloaded / totalLength) * 100)));
-          }
-        }
-      });
-      await relaunch();
-    } catch (err) {
-      setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : '下载安装更新失败，请重试。');
-    }
-  }
-
+export function UpdateNotifier({ updater }: { updater: AppUpdater }) {
+  const { visible, setVisible, status, progress, errorMessage, update, install } = updater;
   if (!visible) return null;
 
   return (
@@ -160,7 +62,7 @@ export function UpdateNotifier({ onManualCheckRef }: { onManualCheckRef?: (check
                 <button className="button button-outline" onClick={() => setVisible(false)}>
                   稍后提醒
                 </button>
-                <button className="button button-primary" onClick={handleDownloadAndInstall}>
+                <button className="button button-primary" onClick={install}>
                   <DownloadCloud size={16} /> 立即更新并重启
                 </button>
               </div>

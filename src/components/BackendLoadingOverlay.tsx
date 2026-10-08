@@ -1,42 +1,8 @@
-import { useEffect, useState } from 'react';
 import { LoaderCircle, RefreshCw, AlertTriangle } from 'lucide-react';
-import { checkBackendHealth, getApiBase } from '../api';
+import { useBackendStatus } from '../platform/useBackendStatus';
 
-export function BackendLoadingOverlay({ onReady }: { onReady?: () => void }) {
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    let attempts = 0;
-    const maxAttempts = 60; // 30 seconds
-
-    async function probe() {
-      await getApiBase();
-      const status = await checkBackendHealth();
-      if (!active) return;
-
-      if (status.ready) {
-        setReady(true);
-        onReady?.();
-      } else {
-        attempts += 1;
-        if (attempts >= maxAttempts) {
-          setError(status.error || '本地后端启动超时，请重试或检查系统防火墙/安全设置。');
-        } else {
-          setTimeout(probe, 500);
-        }
-      }
-    }
-
-    void probe();
-
-    return () => {
-      active = false;
-    };
-  }, [retrying, onReady]);
-
+export function BackendLoadingOverlay() {
+  const { ready, error, retry } = useBackendStatus();
   if (ready) return null;
 
   return (
@@ -51,10 +17,7 @@ export function BackendLoadingOverlay({ onReady }: { onReady?: () => void }) {
             <p className="error-desc">{error}</p>
             <button
               className="button button-primary"
-              onClick={() => {
-                setError(null);
-                setRetrying(r => !r);
-              }}
+              onClick={retry}
             >
               <RefreshCw size={16} /> 重新连接
             </button>

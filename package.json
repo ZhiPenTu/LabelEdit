@@ -10,13 +10,12 @@
     "tauri": "tauri",
     "tauri:dev": "bash scripts/tauri-dev.sh",
     "build:backend": "bash scripts/build-backend.sh",
-    "build:desktop": "bash scripts/build-desktop-macos.sh"
+    "build:desktop": "bash scripts/build-desktop-macos.sh",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1",
-    "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-shell": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.13.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
@@ -24,11 +23,14 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",
+    "@testing-library/react": "^16.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^29.1.1",
     "typescript": "~5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^5.0.3"
   },
   "license": "MIT"
 }

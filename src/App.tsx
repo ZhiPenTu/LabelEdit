@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useRef, useState, type DragEvent } from 'react';
 import { useEditor } from './useEditor';
+import { useAppUpdater } from './platform/useAppUpdater';
 import { Header } from './components/Header';
 import { TextSidebar } from './components/TextSidebar';
 import { Inspector } from './components/Inspector';
@@ -13,7 +14,7 @@ import { UpdateNotifier } from './components/UpdateNotifier';
 export default function App() {
   const editor = useEditor();
   const input = useRef<HTMLInputElement>(null);
-  const manualCheckRef = useRef<(() => void) | null>(null);
+  const updater = useAppUpdater();
   const dragCount = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [tool, setTool] = useState<Tool>('select');
@@ -58,7 +59,7 @@ export default function App() {
       }}
     >
       <BackendLoadingOverlay />
-      <UpdateNotifier onManualCheckRef={fn => (manualCheckRef.current = fn)} />
+      <UpdateNotifier updater={updater} />
 
       <input
         ref={input}
@@ -75,7 +76,7 @@ export default function App() {
       <Header
         editor={editor}
         onOpen={() => input.current?.click()}
-        onCheckUpdates={() => manualCheckRef.current?.()}
+        onCheckUpdates={updater.available ? updater.check : undefined}
       />
       {editor.document ? (
         <>
