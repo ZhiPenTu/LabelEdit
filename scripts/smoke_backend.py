@@ -89,6 +89,7 @@ def main() -> None:
                     try:
                         health = json.loads(request("/api/health"))
                         assert health["ready"], health
+                        assert health["demo_available"], "Bundled sample PDF is missing"
                         break
                     except Exception:
                         if process.poll() is not None or time.monotonic() >= deadline:

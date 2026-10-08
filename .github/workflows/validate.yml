@@ -58,6 +58,8 @@ jobs:
       - name: Build desktop without publishing
         shell: bash
         run: CI=true npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Verify final desktop resources offline
+        run: python scripts/smoke_desktop.py
       - uses: actions/upload-artifact@v4
         with:
           name: LabelEdit-${{ runner.os }}
@@ -65,3 +67,4 @@ jobs:
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/nsis/*.exe
             output/offline-smoke.json
+            output/installed-offline-smoke.json
