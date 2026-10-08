@@ -356,10 +356,12 @@ def preview(identifier: str, body: PreviewBody):
     with store.lease(identifier) as document:
         _page(document, body.page)
         contents = export_pdf(document.path, body.edits)
-        with tempfile.NamedTemporaryFile(suffix=".pdf", dir=document.path.parent) as edited:
-            edited.write(contents)
-            edited.flush()
-            image = render_page(edited.name, body.page, dpi=450)
+        # Windows cannot reopen NamedTemporaryFile while its handle is open.
+        # Close the write before PDFium reads it, and remove it on every exit.
+        with tempfile.TemporaryDirectory(prefix="preview-", dir=document.path.parent) as directory:
+            edited = Path(directory) / "edited.pdf"
+            edited.write_bytes(contents)
+            image = render_page(edited, body.page, dpi=450)
         return Response(_png(image), media_type="image/png")
 
 

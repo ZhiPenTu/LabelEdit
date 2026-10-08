@@ -129,6 +129,11 @@ def main() -> None:
                 if options.report:
                     options.report.parent.mkdir(parents=True, exist_ok=True)
                     options.report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                log.flush()
+                log.seek(0)
+                print(log.read().decode(errors="replace"), file=sys.stderr)
+                raise
             finally:
                 process.terminate()
                 try:
