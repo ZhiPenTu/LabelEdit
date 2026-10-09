@@ -1,5 +1,5 @@
-import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess, net } from 'electron';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess } from 'electron';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -18,6 +18,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'commerce', privileges: { standard: true, secure: true, supportFetchAPI: true } }, { scheme: 'commerce-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 let window, manager, workers, files, credentials, network, host, quitting = false, hostReady;
 const views = new Map(), owners = new Map(), kernelRequests = new Map(); let kernelCounter = 0; let visible = null, systems = [], kernelError = null;
+const pluginSessions = new Map();
 const update = { status: 'idle', version: null, notes: '', error: null, progress: 0 };
 const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
 const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
@@ -36,29 +37,41 @@ async function closeView(id) {
   const view = views.get(id); if (view) { views.delete(id); if (!view.webContents.isDestroyed()) { view.webContents.send('commerce:dispose'); owners.delete(view.webContents.id); if (window && !window.isDestroyed()) window.contentView.removeChildView(view); view.webContents.close(); } }
   if (visible === id) visible = null; network?.stop(id); await files?.revoke(id); await workers?.stop(id);
 }
+async function resourceResponse(filename) {
+  // Read through the trusted broker. Chromium's file/network service does not
+  // need access to private plugin directories or another session's policies.
+  const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.ico': 'image/x-icon' }[path.extname(filename).toLowerCase()] || 'application/octet-stream';
+  return new Response(await readFile(filename), { headers: { 'Content-Type': mime, 'X-Content-Type-Options': 'nosniff' } });
+}
 async function servePlugin(request, id) {
   try { const url = new URL(request.url); if (url.hostname !== id || url.protocol !== 'commerce-plugin:') return new Response('Forbidden', { status: 403 });
     const plugin = await manager.get(id); if (!plugin.enabled) return new Response('Disabled', { status: 403 });
     const image = url.pathname.match(/^\/api\/documents\/([a-f0-9]{32})\/pages\/(\d{1,2})\/image$/);
     if (image && plugin.id === 'official.labeledit') { const value = await (await workers.start(plugin)).call('image', { id: image[1], page: Number(image[2]) }); return new Response(Buffer.from(value.data, 'base64'), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } }); }
     const filename = await confinedPath(plugin.folder, decodeURIComponent(url.pathname.slice(1)));
-    const response = await net.fetch(pathToFileURL(filename).href);
+    const response = await resourceResponse(filename);
     response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
     return response;
-  } catch { return new Response('Not found', { status: 404 }); }
+  } catch (error) { console.error('Plugin resource failed:', id, request.url, error.message); return new Response('Not found', { status: 404 }); }
 }
 async function openView(id, settings = false) {
   const plugin = await manager.get(id); if (!plugin.enabled || plugin.missing.length) throw new Error('插件已停用或缺少依赖。');
   if (!views.has(id)) {
-    const ses = session.fromPartition('persist:commerce-' + id);
-    ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); ses.setPermissionCheckHandler(() => false);
-    if (!await ses.protocol.isProtocolHandled('commerce-plugin')) await ses.protocol.handle('commerce-plugin', request => servePlugin(request, id));
-    ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); callback({ cancel: !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id) }); });
+    let ses = pluginSessions.get(id);
+    if (!ses) {
+      ses = session.fromPartition('persist:commerce-' + id);
+      ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); ses.setPermissionCheckHandler(() => false);
+      // Register in each storage partition explicitly. A scheme being handled
+      // elsewhere does not install an identity-bound handler in this session.
+      ses.protocol.handle('commerce-plugin', request => servePlugin(request, id));
+      ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); callback({ cancel: !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id) }); });
+      ses.on('will-download', async (event, item) => { item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
+      pluginSessions.set(id, ses);
+    }
     const view = new WebContentsView({ webPreferences: { session: ses, preload: path.join(root, 'desktop/plugin-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, additionalArguments: ['--commerce-plugin=' + id] } });
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     view.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
     view.webContents.on('will-attach-webview', event => event.preventDefault());
-    ses.on('will-download', async (event, item) => { if (!plugin.permissions.files) { event.preventDefault(); return; } item.pause(); try { const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch { item.cancel(); } });
     window.contentView.addChildView(view); views.set(id, view); owners.set(view.webContents.id, id);
     try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
     catch (e) { await closeView(id); throw e; }
@@ -181,7 +194,7 @@ await manager.initialize();
 window = new BrowserWindow({ title: '电商工具中心', width: 1380, height: 900, minWidth: 1000, minHeight: 680, webPreferences: { preload: path.join(root, 'desktop/preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce://shell/') && !(process.env.COMMERCE_DEV_URL && url.startsWith(process.env.COMMERCE_DEV_URL + '/'))) event.preventDefault(); });
-protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return net.fetch(pathToFileURL(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))).href); } catch { return new Response('Not found', { status: 404 }); } });
+protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return resourceResponse(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))); } catch { return new Response('Not found', { status: 404 }); } });
 await window.loadURL(process.env.COMMERCE_DEV_URL || 'commerce://shell/index.html');
 void startKernel().catch(error => { kernelError = error.message; changed(); });
 autoUpdater.autoDownload = false; autoUpdater.fullChangelog = false;
