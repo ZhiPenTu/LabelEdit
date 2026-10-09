@@ -4,6 +4,15 @@ import base64
 import json
 from pathlib import Path
 import sys
+# Python's Windows mode=0700 builds a protected user/admin-only DACL. Inside
+# AppContainer that discards the private job's inherited package-SID grant.
+# Preserve the host's restricted inherited ACL on new directories instead.
+if sys.platform == "win32":
+    import os
+    _mkdir = os.mkdir
+    def _sandbox_mkdir(path, mode=0o777, *, dir_fd=None):
+        return _mkdir(path, 0o777 if mode == 0o700 else mode, dir_fd=dir_fd)
+    os.mkdir = _sandbox_mkdir
 _protocol = sys.stdout
 sys.stdout = sys.stderr
 _root = Path(__file__).resolve().parents[1]

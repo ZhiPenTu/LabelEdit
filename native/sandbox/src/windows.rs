@@ -6,14 +6,14 @@ fn checked(ok: i32) -> Result<(), Box<dyn std::error::Error>> { if ok == 0 { Err
 struct Handle(HANDLE);
 impl Drop for Handle { fn drop(&mut self) { unsafe { CloseHandle(self.0); } } }
 struct Container { name: Vec<u16>, sid: PSID, paths: Vec<String> }
-impl Drop for Container { fn drop(&mut self) { unsafe { for path in &self.paths { let _ = edit_acl(path, self.sid, false, true); } DeleteAppContainerProfile(self.name.as_ptr()); FreeSid(self.sid); } } }
-unsafe fn edit_acl(path: &str, sid: PSID, writable: bool, revoke: bool) -> Result<(), Box<dyn std::error::Error>> {
+impl Drop for Container { fn drop(&mut self) { unsafe { for path in &self.paths { let _ = edit_acl(path, self.sid, false, true, false); } DeleteAppContainerProfile(self.name.as_ptr()); FreeSid(self.sid); } } }
+unsafe fn edit_acl(path: &str, sid: PSID, writable: bool, revoke: bool, metadata: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut name = wide(path); let mut old_acl = null_mut(); let mut sd = null_mut();
     let code = GetNamedSecurityInfoW(name.as_ptr(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, null_mut(), null_mut(), &mut old_acl, null_mut(), &mut sd);
     if code != 0 { return Err(std::io::Error::from_raw_os_error(code as i32).into()); }
     let mut access: EXPLICIT_ACCESS_W = zeroed();
-    access.grfAccessPermissions = if writable { FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE } else { FILE_GENERIC_READ | FILE_GENERIC_EXECUTE };
-    access.grfAccessMode = if revoke { REVOKE_ACCESS } else { GRANT_ACCESS }; access.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+    access.grfAccessPermissions = if metadata { FILE_READ_ATTRIBUTES | FILE_TRAVERSE | 0x00100000 } else if writable { FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE } else { FILE_GENERIC_READ | FILE_GENERIC_EXECUTE };
+    access.grfAccessMode = if revoke { REVOKE_ACCESS } else { GRANT_ACCESS }; access.grfInheritance = if metadata { NO_INHERITANCE } else { SUB_CONTAINERS_AND_OBJECTS_INHERIT };
     access.Trustee.TrusteeForm = TRUSTEE_IS_SID; access.Trustee.TrusteeType = TRUSTEE_IS_UNKNOWN; access.Trustee.ptstrName = sid as *mut u16;
     let mut next = null_mut(); let mut code = SetEntriesInAclW(1, &access, old_acl, &mut next);
     if code == 0 { code = SetNamedSecurityInfoW(name.as_mut_ptr(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, null_mut(), null_mut(), next, null_mut()); }
@@ -25,15 +25,25 @@ fn quote_arg(value: &str) -> String {
     for c in value.chars() { if c == '\\' { slashes += 1; } else { out.extend(std::iter::repeat_n('\\', if c == '"' { slashes * 2 + 1 } else { slashes })); slashes = 0; out.push(c); } }
     out.extend(std::iter::repeat_n('\\', slashes * 2)); out.push('"'); out
 }
+fn ancestor_paths(p: &Policy) -> Vec<String> {
+    let mut ancestors=std::collections::BTreeSet::new();
+    for root in p.read_only.iter().chain(p.writable.iter()) {
+        let mut cursor=std::path::Path::new(root).parent();
+        while let Some(dir)=cursor { ancestors.insert(dir.to_string_lossy().into_owned()); cursor=dir.parent(); }
+    }
+    ancestors.into_iter().collect()
+}
+fn all_paths(p: &Policy) -> Vec<String> { let mut paths=ancestor_paths(p); paths.extend(p.read_only.iter().chain(p.writable.iter()).cloned()); paths }
 pub fn launch(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     let id = &p.container;
     let name = wide(&id); let mut sid = null_mut();
     let hr = CreateAppContainerProfile(name.as_ptr(), name.as_ptr(), name.as_ptr(), null(), 0, &mut sid);
     if hr < 0 { return Err(format!("CreateAppContainerProfile failed: {hr:x}").into()); }
-    let _container = Container { name, sid, paths: p.read_only.iter().chain(p.writable.iter()).cloned().collect() };
-    for root in &p.read_only { edit_acl(root, sid, false, false)?; }
+    let _container = Container { name, sid, paths: all_paths(p) };
+    for root in ancestor_paths(p) { edit_acl(&root, sid, false, false, true)?; }
+    for root in &p.read_only { edit_acl(root, sid, false, false, false)?; }
     for root in &p.writable {
-        edit_acl(root, sid, true, false)?;
+        edit_acl(root, sid, true, false, false)?;
         // Low integrity is necessary for an AppContainer to write its private job.
         let sddl = wide("S:(ML;OICI;NW;;;LW)"); let mut sd = null_mut();
         checked(ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), 1, &mut sd, null_mut()))?;
@@ -64,7 +74,8 @@ pub fn launch(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     let mut environment: Vec<u16> = Vec::new();
     let mut values: std::collections::BTreeMap<String,String> = std::env::vars().filter(|(key,_)| !["USERPROFILE","LOCALAPPDATA","APPDATA"].contains(&key.to_uppercase().as_str())).collect();
     for key in ["USERPROFILE","LOCALAPPDATA","APPDATA"] { values.insert(key.to_string(),p.cwd.clone()); }
-    for (key,value) in values { environment.extend(format!("{key}={value}").encode_utf16()); environment.push(0); } environment.push(0); let mut process: PROCESS_INFORMATION = zeroed();
+    let mut sorted: Vec<_> = values.into_iter().collect(); sorted.sort_by_key(|(key,_)| key.to_uppercase());
+    for (key,value) in sorted { environment.extend(format!("{key}={value}").encode_utf16()); environment.push(0); } environment.push(0); let mut process: PROCESS_INFORMATION = zeroed();
     checked(CreateProcessW(executable.as_ptr(), command.as_mut_ptr(), null(), null(), 1, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment.as_ptr() as *const c_void, cwd.as_ptr(), &startup.StartupInfo, &mut process)).map_err(|error| format!("CreateProcess AppContainer: {error}"))?;
     let child = Handle(process.hProcess); let thread = Handle(process.hThread);
     if let Err(error) = checked(AssignProcessToJobObject(job.0, child.0)) { TerminateProcess(child.0, 126); return Err(error); }
@@ -78,7 +89,7 @@ pub fn cleanup(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     let name = wide(&p.container); let mut sid = null_mut();
     let hr = DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut sid);
     if hr < 0 { return Err(format!("cannot derive cleanup SID: {hr:x}").into()); }
-    let container = Container { name, sid, paths: p.read_only.iter().chain(p.writable.iter()).cloned().collect() };
-    for path in &container.paths { if std::path::Path::new(path).exists() { edit_acl(path, sid, false, true)?; } }
+    let container = Container { name, sid, paths: all_paths(p) };
+    for path in &container.paths { if std::path::Path::new(path).exists() { edit_acl(path, sid, false, true, false)?; } }
     drop(container); Ok(0)
 } }
