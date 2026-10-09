@@ -5,9 +5,13 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
+import {execFileSync} from 'node:child_process';
 import {manager,workers} from '../../desktop/main.mjs';
 const directory=process.argv.find(arg=>arg.startsWith('--navigation-fixtures='))?.slice('--navigation-fixtures='.length);
 app.on('will-quit',()=>{if(process.exitCode)app.exit(process.exitCode);});
+app.on('child-process-gone',(_event,details)=>console.error('Child process gone:',details));
+const names=['navigation-web-one','navigation-web-two','navigation-native','navigation-web-three'];
+function runtimeAccess(stage) {if(process.platform==='win32')console.log('Runtime access:',stage,execFileSync('icacls',[process.execPath],{encoding:'utf8'}));}
 async function check() {
 const deadline=Date.now()+30000;
 try {
@@ -21,8 +25,10 @@ try {
   await delay(50);
  }
  const invoke=(method,args={})=>shell.executeJavaScript('window.commerceDesktop.invoke('+JSON.stringify(method)+','+JSON.stringify(args)+')');
- for(const name of ['navigation-native','navigation-web']) {
+ runtimeAccess('before tools');
+ for(const name of names) {
   await manager.install(await readFile(path.join(directory,name+'.ecplugin')));
+  runtimeAccess('installed '+name);
   await invoke('plugins.enable',{id:'local.'+name,enabled:true});
   await invoke('view.open',{id:'local.'+name});
   const view=webContents.getAllWebContents().find(contents=>contents.getURL().startsWith('commerce-plugin://local.'+name+'/'));
@@ -36,10 +42,11 @@ try {
    await delay(50);
   }
   await invoke('view.hide');
+  runtimeAccess('after interaction '+name);
  }
- for(const name of ['navigation-native','navigation-web'])await invoke('view.close',{id:'local.'+name});
+ for(const name of names)await invoke('view.close',{id:'local.'+name});
  assert.equal(workers.workers.size,0,'closing the tools must release local processes');
- console.log('Navigation without debugger: two isolated tool contexts and native service passed.');
+ console.log('Navigation without debugger: multiple isolated tool contexts and native service passed.');
 } catch(error) {console.error(error);process.exitCode=1;}
 finally {app.quit();}
 }

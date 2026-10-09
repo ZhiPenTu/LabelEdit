@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 const root=process.cwd(),temporary=await mkdtemp(path.join(os.tmpdir(),'commerce-navigation-'));
 try {
- for(const [name,native] of [['navigation-native',true],['navigation-web',false]]) {
+ for(const [name,native] of [['navigation-web-one',false],['navigation-web-two',false],['navigation-native',true],['navigation-web-three',false]]) {
   execFileSync(process.execPath,[path.join(root,'packages/plugin-sdk/cli.mjs'),'create',name,...(native?['--native']:[])],{cwd:temporary});
   execFileSync(process.execPath,[path.join(root,'packages/plugin-sdk/cli.mjs'),'pack',path.join(temporary,name),path.join(temporary,name+'.ecplugin')]);
  }
