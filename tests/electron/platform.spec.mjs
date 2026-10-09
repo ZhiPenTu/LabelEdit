@@ -1,14 +1,15 @@
 import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import os from 'node:os';import path from 'node:path';
+import {observeApplication} from './diagnostics.mjs';
 const root=process.cwd(),cli=path.join(root,'packages/plugin-sdk/cli.mjs');
 async function choose(app,filename,save) { await app.evaluate(({dialog},value)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[value.filename]});dialog.showMessageBox=async()=>({response:1});if(value.save)dialog.showSaveDialog=async()=>({canceled:false,filePath:value.save});}, {filename,save}); }
 async function importPlugin(app,page,filename){await choose(app,filename);await page.getByRole('button',{name:'导入插件'}).click();}
-async function pluginPage(app,id){await expect.poll(()=>app.context().pages().some(p=>p.url().includes('commerce-plugin://'+id+'/'))).toBe(true);return app.context().pages().find(p=>p.url().includes('commerce-plugin://'+id+'/'));}
+async function pluginPage(app,id){try{await expect.poll(()=>app.context().pages().some(p=>p.url().includes('commerce-plugin://'+id+'/'))).toBe(true);}catch(error){console.error('Open pages:',app.context().pages().map(p=>p.url()));console.error('Web contents:',await app.evaluate(({webContents})=>webContents.getAllWebContents().map(w=>({id:w.id,url:w.getURL(),destroyed:w.isDestroyed()}))).catch(e=>e.message));throw error;}return app.context().pages().find(p=>p.url().includes('commerce-plugin://'+id+'/'));}
 test('desktop tool tabs, isolated native/web plugin import, offline LabelEdit, cutout preview/save and lifecycle',async()=>{
  const temporary=await mkdtemp(path.join(os.tmpdir(),'commerce-ui-'));let app;
  try{
   for(const [name,native] of [['test-web',false],['test-native',true]]) {execFileSync(process.execPath,[cli,'create',name,...(native?['--native']:[])],{cwd:temporary});execFileSync(process.execPath,[cli,'pack',path.join(temporary,name),path.join(temporary,name+'.ecplugin')]);}
-  app=await electron.launch({args:[root,'--user-data-dir='+path.join(temporary,'data')],timeout:20000});const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
+  app=await electron.launch({args:[root,'--user-data-dir='+path.join(temporary,'data')],timeout:20000});observeApplication(app);const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
   await page.screenshot({path:'output/electron-tests/home.png'});
   await importPlugin(app,page,path.join(temporary,'test-native.ecplugin'));await expect(page.getByRole('heading',{name:'test-native',exact:true})).toBeVisible();
   await page.locator('[data-slot="card"]').filter({hasText:'test-native'}).getByRole('button',{name:'打开工具'}).click();const native=await pluginPage(app,'local.test-native');await native.getByRole('button',{name:'运行示例'}).click();await expect(native.getByRole('status')).toHaveText('插件服务调用成功');
