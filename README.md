@@ -32,7 +32,7 @@ npm run desktop:start
 
 `npm run plugin -- create my-tool` 创建网页插件；加 `--native` 创建本地处理模板。构建后的 ZIP 制品可本地导入，或通过签名市场独立安装和更新，无需重编译底座。首版市场提供目录与下载，不包含账号、支付或开发者自助发布。
 
-LabelEdit 的 PDF、字体与离线 OCR 资源归插件所有，打开后按需启动 RPC 处理程序。旧 Tauri 壳、HTTP 服务、重复启动与打包脚本已清理；旧版下载与更新清单也已移除，版本标签和源码历史保留。
+LabelEdit 的 PDF、字体与离线 OCR 资源归插件所有，打开后按需启动 RPC 处理程序。旧 Tauri 壳、HTTP 服务、重复启动与打包脚本已清理；旧版下载与更新清单也已移除。
 
 ## LabelEdit 使用
 

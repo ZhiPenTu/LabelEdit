@@ -23,7 +23,8 @@
     "test:sandbox": "node --test tests/platform/sandbox.test.mjs",
     "test:kernel": "node --test tests/platform/kernel.test.mjs",
     "build:sandbox": "cargo build --release --manifest-path native/sandbox/Cargo.toml",
-    "test:desktop": "playwright test --config tests/electron/playwright.config.mjs"
+    "test:desktop": "playwright test --config tests/electron/playwright.config.mjs",
+    "build:harness-native": "node scripts/build-harness-native.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -51,14 +52,18 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "44.7.0",
+    "electron": "44.0.0",
     "electron-builder": "26.15.3",
     "jsdom": "^29.1.1",
     "shadcn": "^4.21.4",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.7.2",
     "vite": "^6.0.7",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "node-addon-api": "8.9.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "node-addon-require-builtin": "0.1.6"
+  }
 }

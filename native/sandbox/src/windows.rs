@@ -51,16 +51,12 @@ pub fn launch(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
     limits.BasicLimitInformation.ActiveProcessLimit = 1;
     checked(SetInformationJobObject(job.0, JobObjectExtendedLimitInformation, &limits as *const _ as *const c_void, size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32))?;
-    let mut bytes = 0; InitializeProcThreadAttributeList(null_mut(), 3, 0, &mut bytes);
+    let mut bytes = 0; InitializeProcThreadAttributeList(null_mut(), 2, 0, &mut bytes);
     let mut storage = vec![0usize; bytes.div_ceil(size_of::<usize>())]; let list = storage.as_mut_ptr() as LPPROC_THREAD_ATTRIBUTE_LIST;
-    checked(InitializeProcThreadAttributeList(list, 3, 0, &mut bytes))?;
+    checked(InitializeProcThreadAttributeList(list, 2, 0, &mut bytes))?;
     struct Attributes(LPPROC_THREAD_ATTRIBUTE_LIST); impl Drop for Attributes { fn drop(&mut self) { unsafe { DeleteProcThreadAttributeList(self.0); } } } let _attributes = Attributes(list);
     let capabilities = SECURITY_CAPABILITIES { AppContainerSid: sid, Capabilities: null_mut(), CapabilityCount: 0, Reserved: 0 };
     checked(UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize, &capabilities as *const _ as *const c_void, size_of::<SECURITY_CAPABILITIES>(), null_mut(), null()))?;
-    // Reject child creation before it reaches the job's process-count limit.
-    // PROCESS_CREATION_CHILD_PROCESS_RESTRICTED (Windows 10+).
-    let child_policy: u32 = 1;
-    checked(UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY as usize, &child_policy as *const _ as *const c_void, size_of::<u32>(), null_mut(), null()))?;
     let handles = [GetStdHandle(STD_INPUT_HANDLE), GetStdHandle(STD_OUTPUT_HANDLE), GetStdHandle(STD_ERROR_HANDLE)];
     for handle in handles { checked(SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))?; }
     checked(UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize, handles.as_ptr() as *const c_void, size_of_val(&handles), null_mut(), null()))?;

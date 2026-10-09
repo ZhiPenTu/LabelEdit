@@ -20,10 +20,10 @@
 ## 已通过的本地命令
 
 - `npm run build`
-- `npm test`：当前前端测试（旧 Tauri 更新器测试已移除）。
+- `npm test`：13 个前端测试。
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
-- `npm run test:platform`：真实内核、进程沙箱、Keychain、包管理、代理及打包 RPC 回归。
-- `npm run test:desktop`：真实 Electron 的导入、隔离、标签页、离线 PDF 保存及模拟抠图保存。
+- `npm run test:platform`：20 个测试：真实内核、进程沙箱、Keychain、包管理、代理及打包 RPC 回归。
+- `npm run test:desktop`：2 个测试：真实 Electron 导入、隔离、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理与市场恢复。
 
 ## 尚未完成的公开发布门槛
 
@@ -32,3 +32,7 @@ Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真
 ## 旧代码清理
 
 已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 复用原图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。
+
+## macOS 14 运行资源
+
+当前 Python/OCR 运行资源的 156 个 Mach-O 部署版本检查通过。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。完整安装包扫描与跨平台 CI 结果继续记录。

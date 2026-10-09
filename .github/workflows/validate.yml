@@ -43,6 +43,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
           npm ci --ignore-scripts
           node node_modules/electron/install.js
+          npm run build:harness-native
           python -m backend.ocr_service
       - name: Source checks
         run: |

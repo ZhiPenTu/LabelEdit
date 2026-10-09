@@ -10,13 +10,8 @@ __pycache__/
 tmp/
 output/
 .models/
-.python-runtime/
-.uv-cache/
 *.tsbuildinfo
 
-# Private legacy signing material (never commit)
-.private/
-dist-backend/
 build/
 native/sandbox/target/
 release/

@@ -1,6 +1,6 @@
 # 开发、验证和正式发布
 
-新底座支持 macOS 14+ Apple Silicon、Windows 10+ x64。旧 Tauri 用户手动安装。旧工程、发布工作流、下载与更新清单已按用户决定移除，源码历史和版本标签保留。
+新底座支持 macOS 14+ Apple Silicon、Windows 10+ x64。旧 Tauri 用户手动安装。旧工程、发布工作流、下载与更新清单已按用户决定移除。
 
 ## 本地开发
 
@@ -9,6 +9,7 @@
 ```sh
 npm ci --ignore-scripts
 node node_modules/electron/install.js
+npm run build:harness-native
 python -m pip install -r requirements-dev.txt
 python -m backend.ocr_service
 npm run build:sandbox
@@ -37,3 +38,7 @@ GitHub Secrets：`MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`WIN_CSC_LINK`、`WIN
 使用一次性分支/副本，固定候选 `@deepseek-ai/dsh`、`dsh-app-boot`、`dsh-launch-environment` 同一已发布版本，运行 `npm install --ignore-scripts` 并提交完整 lockfile。检查 `profile-boot`、Profile/Bundle patch 和 Cordis effect API；不得加载第三方代码进内核。
 
 运行真实 `test:kernel`、完整 `test:platform` 与 `test:desktop`，两平台重新打包；记录系统服务、工具注册/调用/停用、文件/网络/凭据权限，以及 LabelEdit 和抠图回归。失败则恢复 package.json 和 lockfile、`npm ci`，重新执行同样测试确认回退。当前 0.2.1-alpha.1 为最新发布版本，可以用 0.2.0-rc.2→当前基线作为升级演练，但不等价于未来版本兼容承诺。
+
+## Electron 与原生内核适配
+
+固定 Electron 44.0.0 与官方 `node-addon-require-builtin@0.1.6`，该组合在上游支持列表内。原生依赖官方 macOS 预编译包的最低部署版本为 15.0；构建时从固定上游提交（SHA-256 校验）编译未修改的 N-API 源码，目标为 macOS 14.0。原生源码不进入本仓库，也不在用户安装插件时编译。macOS 开发需 Xcode 命令行工具。全部随包 Mach-O 都检查实际部署版本，Electron 或适配器更新必须一起完成内核与桌面回归。
