@@ -2,7 +2,7 @@
 
 轻巧的日常工具工作台，基于 Electron + DeepSeek Harness。用户通过工具中心发现、安装、配置、使用和更新插件。LabelEdit 默认附带，支持离线 PDF/OCR 编辑；AI 抠图独立安装，使用用户自己的 remove.bg API 密钥。
 
-[v0.2.2 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.2)。全新「轻作」名称、应用图标、工具中心、插件市场和 LabelEdit 编辑器设计，采用 shadcn/ui + Base UI + Tailwind CSS。当前通过 GitHub 分发未签名安装包，不上架 App Store；Apple/Windows 发布者签名为后续可选能力。旧版下载与更新清单按用户决定移除，旧用户需手动安装新底座。
+[v0.2.3 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.3)。新增应用内下载进度、完整性校验及自动安装重启，保留轻作工具中心、插件市场和 LabelEdit 编辑器。当前通过 GitHub 分发未签名安装包；Apple/Windows 发布者签名为后续可选能力。v0.2.0–v0.2.2 用户需先安装一次 v0.2.3，之后可使用应用内更新。
 
 支持 macOS 14+ Apple Silicon 和 Windows 10+ x64。
 
@@ -44,7 +44,7 @@ LabelEdit 的 PDF、字体与离线 OCR 资源归插件所有，打开后按需�
 4. 应用修改并检查预览，可撤销或移除修改。
 5. 导出 PDF 并选择保存位置。保留原页面尺寸，标签打印使用实际大小 / 100%，原文件不会被覆盖。
 
-底座「更新」页面检查 GitHub 最新公开版本，只显示该版本的变更日志，并打开对应下载页供用户手动安装。插件仍通过签名校验独立安装和更新。主题支持浅色、深色与跟随系统，PDF 与导出颜色不受主题影响。
+底座「更新」页面检查 GitHub 最新公开版本，只显示该版本的变更日志；点击「下载并重启更新」后显示下载进度，完成校验后自动安装并重启。更新前请保存正在编辑的文件。插件仍通过签名校验独立安装和更新。主题支持浅色、深色与跟随系统，PDF 与导出颜色不受主题影响。
 
 ## 验证
 

@@ -10,14 +10,14 @@
       "releaseNotes": "统一轻作视觉设计：更新编辑器工具栏、文字区域列表、属性面板与空白页，保留离线 OCR 与原尺寸 PDF 编辑导出。",
       "artifacts": {
         "darwin-arm64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.labeledit-0.1.1-darwin-arm64.ecplugin",
-          "sha256": "f1f31bf3dbe6169f8ff13e7d2d0e80a97ddad5eb39e1f26172642bbde260b17c",
-          "signature": "b4DIQYV5gP0MBSywW9siT0mcgK4YvsuQaaVAMcN1VGsh+WzFwM1Scxq88Ls/Vgbohd9t4Tg1VW2o7HWro8QhBw=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.3/official.labeledit-0.1.1-darwin-arm64.ecplugin",
+          "sha256": "c1078dadfdcf52513b9a01f97111102ee934ad7695d210d767deaafeaa611af3",
+          "signature": "hKyuz7hVQHrZOmfwNB1HhPYD1Evq2mDKNvovJv7barl/O0v9I8Inkh5O1kKsgMVyC/BB9NCAg/TyR25SYfj2Dg=="
         },
         "win32-x64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.labeledit-0.1.1-win32-x64.ecplugin",
-          "sha256": "d8554a63f93874b4aa92e7a3def4f3cfa6cf644696888296fdc7f1bf02e59d19",
-          "signature": "7HyrpbbCDqibba5Vve+QBWV1PUTRXTUrm6QgKzRrpUGWMy9y9/ra5nYS43tPIChQTVXh7EuXFMcmdcBPcA54BA=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.3/official.labeledit-0.1.1-win32-x64.ecplugin",
+          "sha256": "6cb95287e3b8acbf5ea820d6b2c9f6a0c24d4c6db9f9f58a55019397cb28b845",
+          "signature": "VvJwHMI9fPQfxQSmMZ2q0tZOfBqJrUJzSnHH0nmCYK8KAJWcrzfcwRLig0WgiKmY50xhooY5bu0eHH9WFkUxDg=="
         }
       }
     },
@@ -30,14 +30,14 @@
       "releaseNotes": "选择图片、在线抠图、前后预览并保存透明 PNG。",
       "artifacts": {
         "darwin-arm64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.removebg-0.1.0-darwin-arm64.ecplugin",
-          "sha256": "52c8fc0dd19f9fe2a3830732be9b4d51329a07cbadc2fdc5b420266607bc78f5",
-          "signature": "lPvjZD9hTcRE/+2Lz6wjKAAWANAZA2f+QiISRBX738Y9rhz44tyscbe7hk0AyJq2AuvpbU6SEbPAczxgLcZ2Ag=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.3/official.removebg-0.1.0-darwin-arm64.ecplugin",
+          "sha256": "43e237a4f0a61af6a0a64986751b6af77f0ef20ca20cd942f1700acaa0d9ee74",
+          "signature": "Gy+YaFxNf5rcP3niM6DBFSHyODbILFCNNXsR8Q8kmXVCex22V9DjqrKQCdiQ1fg5yJ7IY3b+IzroNyN1tAsOBQ=="
         },
         "win32-x64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.removebg-0.1.0-win32-x64.ecplugin",
-          "sha256": "36e8600abd3ae104bb75edf0027a7e4e5e3a8623253768d1f698854d034082af",
-          "signature": "JEm+3IV7ebzFkOj0wI8/DwCh/XtyiIUO1Fm+/yo+VXPTUyYHh89YdlhBCDYCbgMKqCeQkHx07O+pLFT9b3mkBA=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.3/official.removebg-0.1.0-win32-x64.ecplugin",
+          "sha256": "11ee628ced99e4ac24b5410d46dcf3364156d969d786668371953bd8cf4bc88d",
+          "signature": "6EFlpVSKSF3UhZNSfDAEI3DUxR+MnP9M7lic2yqBCbyxmrY9cjVWjEyrMlzMBjlbpnvZJOF50wXK+zh8zRcuAQ=="
         }
       }
     }
