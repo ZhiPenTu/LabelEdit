@@ -3,7 +3,7 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
-async function probe(sentinel) {
+async function probe(sentinel, port) {
   const result = { read: false, write: false, link: false, spawn: false, socket: false };
   try { fs.readFileSync(sentinel); result.read = true; } catch {}
   try { fs.writeFileSync(sentinel, 'OVERWRITE'); result.write = true; } catch {}
@@ -23,10 +23,10 @@ async function probe(sentinel) {
   });
   process.stderr.write('probe: process checked\n');
   result.socket = await new Promise(resolve => {
-    const socket = net.connect(9, '127.0.0.1');
+    const socket = net.connect(port, '127.0.0.1');
     const timer = setTimeout(() => { socket.destroy(); resolve(false); }, 1500);
     socket.once('connect', () => { clearTimeout(timer); socket.destroy(); resolve(true); });
-    socket.once('error', error => { clearTimeout(timer); resolve(!['EACCES', 'EPERM'].includes(error.code)); });
+    socket.once('error', error => { clearTimeout(timer); process.stderr.write('probe: socket denied ' + error.code + '\n'); resolve(false); });
   });
   process.stderr.write('probe: network checked\n');
   fs.writeFileSync('allowed.txt', 'OK');
@@ -35,7 +35,7 @@ async function probe(sentinel) {
 for await (const line of createInterface({ input: process.stdin })) {
   const request = JSON.parse(line);
   try {
-    const result = request.method === 'health' ? { ready: true } : await probe(request.args.sentinel);
+    const result = request.method === 'health' ? { ready: true } : await probe(request.args.sentinel, request.args.port);
     process.stdout.write(JSON.stringify({ id: request.id, result }) + '\n');
   } catch (error) {
     process.stdout.write(JSON.stringify({ id: request.id, error: error.message }) + '\n');
