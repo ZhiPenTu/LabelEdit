@@ -37,7 +37,7 @@ npm run desktop:start
 
 v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独立工作目录并清除 `NODE_PATH` / `NODE_OPTIONS` 后启动。不得让源码仓库中的依赖参与验收。Harness 启动接口的必需 peer dependencies 明确列入桌面生产依赖；缺失依赖必须导致这项验收失败。
 
-`release-commerce.yml` 拒绝缺失或不匹配的插件密钥、验收版本与发布标签不一致的构建。完成最低支持系统验收后，推送匹配版本的 `v<version>` 标签，再重新构建并发布 GitHub Release；只有标签触发的发布任务具有仓库写入权限。标签发布读取 Repository variable `COMMERCE_DESKTOP_SIGNING`，未设置时默认 `unsigned`。更新说明取 `docs/releases/v<version>.md`。
+`release-commerce.yml` 拒绝缺失或不匹配的插件密钥、验收版本与发布标签不一致的构建。取得用户发布授权后，推送匹配版本的 `v<version>` 标签，再重新构建并发布 GitHub Release；只有标签触发的发布任务具有仓库写入权限。最低支持系统的实机验收状态须单独记录，双平台 CI 不等于该项验收通过。标签发布读取 Repository variable `COMMERCE_DESKTOP_SIGNING`，未设置时默认 `unsigned`。更新说明取 `docs/releases/v<version>.md`。
 
 更新页在用户点击「下载并重启更新」后显示下载百分比及已下载大小，下载完成后自动安装并重启。未签名 macOS 底座从固定 GitHub 仓库读取最新正式 Release，只展示该版日志，选择 Apple Silicon ZIP，并流式校验 GitHub 提供的 SHA-256 和大小；随后用 ditto 解压，校验应用标识、版本及 ad-hoc 签名。独立助手等待旧进程退出，在同一文件系统替换应用，替换或启动交接失败时尝试恢复旧版，并在下次启动显示错误。Windows 和正式签名构建使用 electron-updater 的完整性/签名校验及安装流程，Windows 静默安装后自动运行。用户数据和插件保留在原目录。下载前提示保存文件；下载或校验失败可手动重试，切换页面不会中断更新。
 
