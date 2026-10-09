@@ -1,6 +1,6 @@
 # 实施状态与验收证据
 
-任务依据：`commerce-plugin-platform-taskbook.md`。公开版本目标为 v0.2.0。本文件区分代码完成与真实验收，未经验证的发布门槛不能勾选。
+任务依据：`commerce-plugin-platform-taskbook.md`。[v0.2.0 已在 GitHub 发布](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.0)。本文件区分发布完成与真实验收，未经验证的能力不能勾选。
 
 | 范围 | 当前证据 |
 | --- | --- |
@@ -13,8 +13,8 @@
 | 自制工具 | SDK 网页/本地模板在运行中的底座导入并完成调用，无需重编译底座；页面无法使用 Node；独立会话强制不可达代理并禁用非代理 WebRTC，真实 TCP/TURN 与 UDP/STUN 哨兵验证未收到插件连接；网络配置校验失败时阻止页面打开 |
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
-| 市场 | 线上目录、签名制品与发布工具完成；生产 Ed25519 私钥已写入 GitHub Secret，公钥已写入 Repository Variable，本机签名验证与远端公钥匹配通过；正式目录内容尚待发布 |
-| GitHub 更新和发布 | 默认不要求 Apple/Windows 证书，手动检查 GitHub 最新版本、展示日志并打开固定下载页；插件签名保持必需。手动工作流仅上传验收制品，无仓库写入权限；匹配版本的标签才触发公开发布。正式签名保留为可选模式；安装升级实测尚待进行 |
+| 市场 | 生产 Ed25519 密钥已配置；正式目录包含 LabelEdit 和 AI 抠图的 macOS arm64 / Windows x64 签名制品，随 v0.2.0 发布并接入客户端默认目录 |
+| GitHub 更新和发布 | v0.2.0 的两平台构建、完整打包应用回归及公开发布通过；安装包、插件、SDK 与最新日志已上传。默认不要求 Apple/Windows 证书，底座手动更新；插件签名保持必需。手动工作流仅上传验收制品，版本标签才公开发布。正式签名保留为可选模式；最低支持系统安装升级实测尚待进行 |
 | 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归通过两平台 CI |
 
 ## 已通过的本地命令
@@ -29,9 +29,11 @@
 - `node scripts/test-packaged-desktop.mjs`：直接启动分发目录内的应用，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
 - 2026-10-09 的未签名分发调整：在没有发布者证书的情况下生成 macOS arm64 DMG/ZIP；实际签名为 `adhoc`、无 Team ID。295 个随包 Mach-O 的 macOS 14 部署版本检查、生产市场公钥/更新模式/打包源码一致性检查，以及完整打包应用的手动更新页、内核、OCR 与 PDF 保存通过。本项不等于最低系统的用户安装验收。
 
-## 尚未完成的公开发布门槛
+## 尚未完成的用户验收
 
-macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更新回归；正式目录和公开安装包尚未发布。按用户 2026-10-09 的补充决定，当前 GitHub 分发不要求 Apple Developer ID、notarization 或 Windows 发布者签名；remove.bg 真实 API 与额度验收暂缓。正式签名和标准自动更新仍是后续可选能力，不能将它们或真实 API 验收标记为已完成。
+macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更新回归尚未完成。v0.2.0 已按用户 2026-10-09 的发布指令公开，两平台 CI 的最新系统测试不等于最低系统验收。当前 GitHub 分发不要求 Apple Developer ID、notarization 或 Windows 发布者签名；remove.bg 真实 API 与额度验收暂缓。正式签名和标准自动更新仍是后续可选能力，不能将它们或真实 API 验收标记为已完成。
+
+发布证据：[v0.2.0 工作流](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37918154199) 的 macOS、Windows 打包和 publish 三个任务全部成功；公开 Release 包含 14 个文件，版本标签指向 `0d0c703`。后续市场目录独立维护，不修改已发布标签。
 
 ## 旧代码清理
 
@@ -39,6 +41,6 @@ macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更
 
 ## macOS 14 运行资源
 
-本地 Python/OCR 运行资源的 267 个 Mach-O、完整 `.app` 的 295 个 Mach-O 部署版本检查通过；GitHub CI 的 Python 框架构建分别为 323 和 351 个，均支持部署目标 macOS 14.0。数量包含已转换为普通文件的内部库及框架别名。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。
+当前独立 Python/OCR 运行资源的 267 个 Mach-O、完整 `.app` 的 295 个 Mach-O 部署版本检查通过，均支持部署目标 macOS 14.0。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。
 
 完整安装包的 CI 构建暴露了 Python framework 普通资源布局无法重新 codesign 的问题。macOS 打包改用独立 CPython 3.12.11（uv 0.11.6 管理），打包入口提前拒绝 framework Python。临时构建环境使用真实解释器路径及链接，避免复制 standalone 可执行文件后无法定位 libpython；最终插件资源仍转为普通文件。插件制品不接受符号链接，不通过忽略运行资源签名绕过此问题。

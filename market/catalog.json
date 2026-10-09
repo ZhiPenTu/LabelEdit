@@ -1,4 +1,45 @@
 {
   "schemaVersion": 1,
-  "plugins": []
+  "plugins": [
+    {
+      "id": "official.labeledit",
+      "title": "LabelEdit",
+      "description": "本地 PDF 标签编辑、文字识别与导出",
+      "category": "标签与文档",
+      "version": "0.1.0",
+      "releaseNotes": "LabelEdit 已作为独立插件接入，支持离线 PDF 编辑和 OCR。",
+      "artifacts": {
+        "darwin-arm64": {
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.0/official.labeledit-0.1.0-darwin-arm64.ecplugin",
+          "sha256": "665a0fedbae2b09900615281d83176fa327b61b8e90bc17c802f27eb08a60b1e",
+          "signature": "Z0MLgpeBtimFcaWvaEFQBrn4sxlnhn28NEwjjMJXxX+n+JVnCzwuYB0y/M43HKy9wOPiXc1eey/AfsfgPvFYCw=="
+        },
+        "win32-x64": {
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.0/official.labeledit-0.1.0-win32-x64.ecplugin",
+          "sha256": "14e267b342c9dc87193ff3f383a8ecd19efd63364bdf235840a743df17ee81ab",
+          "signature": "M9vZDTtNKj9gyqsxXHurtQEUtvXc10Qmgb640rSo4ZvYSAnaZu3LJ9u+mFF8WFtVzTksH/7mHKJOVAdr62zrBg=="
+        }
+      }
+    },
+    {
+      "id": "official.removebg",
+      "title": "AI 抠图",
+      "description": "连接 remove.bg，生成透明背景的商品图片",
+      "category": "图片处理",
+      "version": "0.1.0",
+      "releaseNotes": "选择图片、在线抠图、前后预览并保存透明 PNG。",
+      "artifacts": {
+        "darwin-arm64": {
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.0/official.removebg-0.1.0-darwin-arm64.ecplugin",
+          "sha256": "a2734df997bb9e5485d28cacbd10a4d83143e229a08eaf9e50f628e324c74100",
+          "signature": "YyoeoiZHyjkAmJ+43NgRSaCm34XyUOuRaKaMk426oXBuPQshl+4yT4ySY3D7cFu4sjiIo5izamG7zXUqIkx1Aw=="
+        },
+        "win32-x64": {
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.0/official.removebg-0.1.0-win32-x64.ecplugin",
+          "sha256": "3426440108488233c2f00d60f2ecc9cb1c1e3f6edd6d53a3b5117d8deed0317d",
+          "signature": "m/8ok1NRcjLM0JVN3Sk21u/YW+LjtYUYaE5jaXKk9N93UCM57MW7ACjXCgEU663D0mXBBDei9nRYE3oOllEkAA=="
+        }
+      }
+    }
+  ]
 }
