@@ -2,7 +2,7 @@
 
 Electron + DeepSeek Harness 的电商插件服务统一入口。用户通过工具中心发现、安装、配置、使用和更新插件。LabelEdit 默认附带，支持离线 PDF/OCR 编辑；AI 抠图独立安装，使用用户自己的 remove.bg API 密钥。
 
-[v0.2.0 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.0)。当前通过 GitHub 分发未签名安装包，不上架 App Store；Apple/Windows 发布者签名为后续可选能力。旧版下载与更新清单按用户决定移除，旧用户需手动安装新底座。
+[v0.2.1 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.1)。修复 v0.2.0 安装后内核启动失败的问题。当前通过 GitHub 分发未签名安装包，不上架 App Store；Apple/Windows 发布者签名为后续可选能力。旧版下载与更新清单按用户决定移除，旧用户需手动安装新底座。
 
 支持 macOS 14+ Apple Silicon 和 Windows 10+ x64。
 

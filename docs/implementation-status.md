@@ -19,14 +19,20 @@
 
 ## 已通过的本地命令
 
+### v0.2.1 内核启动修复
+
+v0.2.0 从 `/Applications` 启动时已复现 `ERR_MODULE_NOT_FOUND: @deepseek-ai/cordis-plugin-group`。生产打包漏掉 Harness 启动所需的 peer dependencies，其中还包括 `dsh-scope`；原先从源码目录启动的打包测试借用了开发依赖，不能证明独立安装可用。此前的打包启动记录存在这一局限。
+
+v0.2.1 显式声明固定版本的启动运行依赖；内核模块在初始化处理器中加载，缺失模块错误通过 IPC 返回。打包测试将完整应用复制到源码目录外，清除 Node 依赖环境变量并使用独立工作目录启动。本机新测试通过真实内核、离线 OCR 和 PDF 保存；28 项平台测试（含缺失启动模块的子进程回归）、13 项前端测试、3 项 Electron 测试及 295 个 Mach-O 的最低系统检查通过。跨平台 CI 和修复版发布另行确认。
+
 - `npm run build`
 - `npm test`：13 个前端测试。
 - `python -m pytest -q`：11 个测试及 4 个子测试，包含 Python 框架资源转换与越界/循环链接拒绝。
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
-- `npm run test:platform`：27 个测试：真实内核、进程沙箱、系统凭据、包管理、代理、打包 RPC、可选代码签名及 GitHub 手动更新回归。
+- `npm run test:platform`：28 个测试：真实内核、缺失模块诊断、进程沙箱、系统凭据、包管理、代理、打包 RPC、可选代码签名及 GitHub 手动更新回归。
 - `node scripts/test-plugin-navigation.mjs`：不接入调试器的真实应用检查，连续并发打开网页工具，在本地服务运行时再打开工具，验证同一插件只有一个页面、WebRTC 的真实 TCP/UDP 请求被阻止及关闭后释放处理进程；Windows 额外检查桌面可执行文件 ACL 不受插件影响。
 - `npm run test:desktop`：3 个测试：真实 Electron 导入、隔离（含 WebRTC TCP/UDP 探测）、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理、市场恢复及未签名底座的最新日志/GitHub 下载页/拒绝自动安装/检查失败重试。
-- `node scripts/test-packaged-desktop.mjs`：直接启动分发目录内的应用，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
+- `node scripts/test-packaged-desktop.mjs`：复制分发应用到源码目录外并独立启动，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
 - 2026-10-09 的未签名分发调整：在没有发布者证书的情况下生成 macOS arm64 DMG/ZIP；实际签名为 `adhoc`、无 Team ID。295 个随包 Mach-O 的 macOS 14 部署版本检查、生产市场公钥/更新模式/打包源码一致性检查，以及完整打包应用的手动更新页、内核、OCR 与 PDF 保存通过。本项不等于最低系统的用户安装验收。
 
 ## 尚未完成的用户验收
