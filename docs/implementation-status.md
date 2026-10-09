@@ -1,6 +1,6 @@
 # 实施状态与验收证据
 
-任务依据：`commerce-plugin-platform-taskbook.md`。[v0.2.0 已在 GitHub 发布](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.0)。本文件区分发布完成与真实验收，未经验证的能力不能勾选。
+任务依据：`commerce-plugin-platform-taskbook.md`。[v0.2.1 已在 GitHub 发布](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.1)，修复独立安装后的内核启动失败。本文件区分发布完成与真实验收，未经验证的能力不能勾选。
 
 | 范围 | 当前证据 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
 | 市场 | 生产 Ed25519 密钥已配置；正式目录包含 LabelEdit 和 AI 抠图的 macOS arm64 / Windows x64 签名制品，随 v0.2.0 发布并接入客户端默认目录 |
-| GitHub 更新和发布 | v0.2.0 的两平台构建、完整打包应用回归及公开发布通过；安装包、插件、SDK 与最新日志已上传。默认不要求 Apple/Windows 证书，底座手动更新；插件签名保持必需。手动工作流仅上传验收制品，版本标签才公开发布。正式签名保留为可选模式；最低支持系统安装升级实测尚待进行 |
+| GitHub 更新和发布 | v0.2.1 的两平台构建、源码目录外完整应用回归及公开发布通过；安装包、插件、SDK 与最新日志已上传。默认不要求 Apple/Windows 证书，底座手动更新；插件签名保持必需。手动工作流仅上传验收制品，版本标签才公开发布。正式签名保留为可选模式；最低支持系统安装升级实测尚待进行 |
 | 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归通过两平台 CI |
 
 ## 已通过的本地命令
@@ -23,7 +23,9 @@
 
 v0.2.0 从 `/Applications` 启动时已复现 `ERR_MODULE_NOT_FOUND: @deepseek-ai/cordis-plugin-group`。生产打包漏掉 Harness 启动所需的 peer dependencies，其中还包括 `dsh-scope`；原先从源码目录启动的打包测试借用了开发依赖，不能证明独立安装可用。此前的打包启动记录存在这一局限。
 
-v0.2.1 显式声明固定版本的启动运行依赖；内核模块在初始化处理器中加载，缺失模块错误通过 IPC 返回。打包测试将完整应用复制到源码目录外，清除 Node 依赖环境变量并使用独立工作目录启动。本机新测试通过真实内核、离线 OCR 和 PDF 保存；28 项平台测试（含缺失启动模块的子进程回归）、13 项前端测试、3 项 Electron 测试及 295 个 Mach-O 的最低系统检查通过。跨平台 CI 和修复版发布另行确认。
+v0.2.1 显式声明固定版本的启动运行依赖；内核模块在初始化处理器中加载，缺失模块错误通过 IPC 返回。打包测试将完整应用复制到源码目录外，清除 Node 依赖环境变量并使用独立工作目录启动。本机新测试通过真实内核、离线 OCR 和 PDF 保存；28 项平台测试（含缺失启动模块的子进程回归）、13 项前端测试、3 项 Electron 测试及 295 个 Mach-O 的最低系统检查通过。
+
+[修复 PR #6](https://github.com/ZhiPenTu/LabelEdit/pull/6) 已合并；[双平台验证](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37921232929) 和 [v0.2.1 正式发布](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37921410975) 全部成功。本机 `/Applications` 中的修复版使用现有用户数据完成七个内核服务和离线 OCR 检查，普通启动也显示内核已连接；原 v0.2.0 应用已备份，用户数据未清除。
 
 - `npm run build`
 - `npm test`：13 个前端测试。
