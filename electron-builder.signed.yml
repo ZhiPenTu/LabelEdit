@@ -1,0 +1,7 @@
+extends: electron-builder.yml
+forceCodeSigning: true
+mac:
+  identity: null
+  notarize: true
+win:
+  verifyUpdateCodeSignature: true

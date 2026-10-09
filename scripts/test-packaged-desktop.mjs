@@ -2,6 +2,7 @@ import { _electron, expect } from '@playwright/test';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { desktopSigningMode } from '../desktop/distribution.mjs';
 
 const executablePath = path.resolve(process.argv[2] || (process.platform === 'darwin'
   ? 'release/desktop/mac-arm64/Commerce Tools.app/Contents/MacOS/Commerce Tools'
@@ -13,6 +14,13 @@ try {
   app.process().stderr.on('data', bytes => process.stderr.write(bytes));
   const page = await app.firstWindow();
   await expect(page.getByText('Harness 内核已连接')).toBeVisible({ timeout: 30000 });
+  const status = await page.evaluate(() => window.commerceDesktop.invoke('status'));
+  expect(status.update.delivery).toBe(desktopSigningMode() === 'signed' ? 'automatic' : 'manual');
+  if (status.update.delivery === 'manual') {
+    await page.getByRole('button', { name: '更新', exact: true }).click();
+    await expect(page.getByText('从 GitHub 下载新版安装包后手动安装。', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '工具中心', exact: true }).click();
+  }
   await mkdir('output/electron-tests', { recursive: true });
   await page.screenshot({ path: 'output/electron-tests/packaged-home.png' });
   await page.locator('[data-slot="card"]').filter({ hasText: 'LabelEdit' }).getByRole('button', { name: '打开工具' }).click();

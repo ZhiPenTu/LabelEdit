@@ -23,6 +23,7 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      COMMERCE_DESKTOP_SIGNING: unsigned
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,6 +35,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        if: runner.os == 'macOS'
+        with:
+          version: '0.11.6'
+          enable-cache: false
+      - name: Select framework-free macOS packaging Python
+        if: runner.os == 'macOS'
+        run: |
+          uv python install 3.12.11
+          COMMERCE_PACKAGING_PYTHON=$(uv python find --managed-python 3.12.11)
+          echo "COMMERCE_PACKAGING_PYTHON=$COMMERCE_PACKAGING_PYTHON" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -52,7 +64,12 @@ jobs:
           npm run build
           npm run build:sandbox
       - name: Build offline RPC plugin
-        run: python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            "$COMMERCE_PACKAGING_PYTHON" scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+          else
+            python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+          fi
       - name: Prepare and test actual sandboxed processes
         run: |
           npm run platform:prepare
@@ -63,12 +80,8 @@ jobs:
       - name: Package Electron application (validation only)
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            npx electron-builder --dir --mac --arm64 --publish never --config electron-builder.yml -c.mac.identity=null -c.mac.notarize=false
-            node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"
-          else
-            npx electron-builder --dir --win --x64 --publish never --config electron-builder.yml
-          fi
+          node scripts/package-desktop.mjs --dir
+          if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"; fi
           node scripts/test-packaged-desktop.mjs
       - uses: actions/upload-artifact@v4
         if: always()

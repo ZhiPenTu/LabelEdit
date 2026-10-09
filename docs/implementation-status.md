@@ -13,8 +13,8 @@
 | 自制工具 | SDK 网页/本地模板在运行中的底座导入并完成调用，无需重编译底座；页面无法使用 Node；独立会话强制不可达代理并禁用非代理 WebRTC，真实 TCP/TURN 与 UDP/STUN 哨兵验证未收到插件连接；网络配置校验失败时阻止页面打开 |
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
-| 市场 | 线上目录、签名制品与发布工具完成；生产签名密钥和正式目录内容尚待发布 |
-| 正式更新和发布 | Electron 标准更新、最新日志、签名预检和发布 CI 完成；支持先手动构建签名验收制品，手动路径不公开发布且无仓库写入权限；正式签名/安装升级实测尚待凭据 |
+| 市场 | 线上目录、签名制品与发布工具完成；生产 Ed25519 私钥已写入 GitHub Secret，公钥已写入 Repository Variable，本机签名验证与远端公钥匹配通过；正式目录内容尚待发布 |
+| GitHub 更新和发布 | 默认不要求 Apple/Windows 证书，手动检查 GitHub 最新版本、展示日志并打开固定下载页；插件签名保持必需。手动工作流仅上传验收制品，无仓库写入权限；匹配版本的标签才触发公开发布。正式签名保留为可选模式；安装升级实测尚待进行 |
 | 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归通过两平台 CI |
 
 ## 已通过的本地命令
@@ -23,14 +23,15 @@
 - `npm test`：13 个前端测试。
 - `python -m pytest -q`：11 个测试及 4 个子测试，包含 Python 框架资源转换与越界/循环链接拒绝。
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
-- `npm run test:platform`：24 个测试：真实内核、进程沙箱、系统凭据、包管理、代理、打包 RPC 与签名构建/发布门槛回归。
+- `npm run test:platform`：27 个测试：真实内核、进程沙箱、系统凭据、包管理、代理、打包 RPC、可选代码签名及 GitHub 手动更新回归。
 - `node scripts/test-plugin-navigation.mjs`：不接入调试器的真实应用检查，连续并发打开网页工具，在本地服务运行时再打开工具，验证同一插件只有一个页面、WebRTC 的真实 TCP/UDP 请求被阻止及关闭后释放处理进程；Windows 额外检查桌面可执行文件 ACL 不受插件影响。
-- `npm run test:desktop`：2 个测试：真实 Electron 导入、隔离（含 WebRTC TCP/UDP 探测）、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理与市场恢复。
+- `npm run test:desktop`：3 个测试：真实 Electron 导入、隔离（含 WebRTC TCP/UDP 探测）、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理、市场恢复及未签名底座的最新日志/GitHub 下载页/拒绝自动安装/检查失败重试。
 - `node scripts/test-packaged-desktop.mjs`：直接启动分发目录内的应用，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
+- 2026-10-09 的未签名分发调整：在没有发布者证书的情况下生成 macOS arm64 DMG/ZIP；实际签名为 `adhoc`、无 Team ID。295 个随包 Mach-O 的 macOS 14 部署版本检查、生产市场公钥/更新模式/打包源码一致性检查，以及完整打包应用的手动更新页、内核、OCR 与 PDF 保存通过。本项不等于最低系统的用户安装验收。
 
 ## 尚未完成的公开发布门槛
 
-Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真实 API 与额度验收；macOS 14 与 Windows 10 最低支持系统的沙箱、安装和标准更新回归。用户已确认稍后配置凭据，先完成实现与测试。当前验证制品不是正式公开发行版，不应标记全部五阶段验收完成。
+macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更新回归；正式目录和公开安装包尚未发布。按用户 2026-10-09 的补充决定，当前 GitHub 分发不要求 Apple Developer ID、notarization 或 Windows 发布者签名；remove.bg 真实 API 与额度验收暂缓。正式签名和标准自动更新仍是后续可选能力，不能将它们或真实 API 验收标记为已完成。
 
 ## 旧代码清理
 
@@ -39,3 +40,5 @@ Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真
 ## macOS 14 运行资源
 
 本地 Python/OCR 运行资源的 267 个 Mach-O、完整 `.app` 的 295 个 Mach-O 部署版本检查通过；GitHub CI 的 Python 框架构建分别为 323 和 351 个，均支持部署目标 macOS 14.0。数量包含已转换为普通文件的内部库及框架别名。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。
+
+完整安装包的 CI 构建暴露了 Python framework 普通资源布局无法重新 codesign 的问题。macOS 打包改用独立 CPython 3.12.11（uv 0.11.6 管理），打包入口提前拒绝 framework Python。临时构建环境使用真实解释器路径及链接，避免复制 standalone 可执行文件后无法定位 libpython；最终插件资源仍转为普通文件。插件制品不接受符号链接，不通过忽略运行资源签名绕过此问题。

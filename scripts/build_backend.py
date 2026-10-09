@@ -5,9 +5,9 @@ import argparse
 from pathlib import Path
 import subprocess
 import sys
+import sysconfig
 import shutil
 from tempfile import TemporaryDirectory
-import venv
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,13 +57,21 @@ def main() -> None:
     options = parser.parse_args()
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Backend packaging requires Python 3.12.")
+    if sys.platform == "darwin" and sysconfig.get_config_var("PYTHONFRAMEWORK"):
+        raise SystemExit("macOS backend packaging requires non-framework Python; use uv-managed CPython 3.12.11. Framework aliases cannot be both materialized for plugin ZIPs and codesigned as a framework bundle.")
     staging = ROOT / ".venv-packaging"
     staging.mkdir(exist_ok=True)
     # A new environment per build also prevents concurrent builds from sharing
     # mutable packages. It is removed after PyInstaller has copied its resources.
     with TemporaryDirectory(prefix="build-", dir=staging) as directory:
         environment = Path(directory)
-        venv.EnvBuilder(with_pip=True, symlinks=False).create(environment)
+        # A copied standalone macOS executable cannot locate its adjacent
+        # libpython. Link the trusted interpreter only inside this temporary
+        # build environment; shipped plugin resources are still materialized.
+        # Resolve launcher aliases so pyvenv.cfg points to the real stdlib.
+        interpreter = str(Path(sys._base_executable).resolve(strict=True))
+        environment_options = ["--symlinks"] if sys.platform == "darwin" else ["--copies"]
+        run(interpreter, "-m", "venv", *environment_options, str(environment))
         python = str(environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python"))
         run(python, "-m", "pip", "install", "--disable-pip-version-check", "--timeout", "30", "--retries", "2", "-r", str(ROOT / "requirements-build.txt"))
         run(python, "-m", "pip", "check")

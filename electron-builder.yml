@@ -10,6 +10,7 @@ files:
   - packages/plugin-sdk/**/*
   - package.json
 afterPack: desktop/after-pack.cjs
+forceCodeSigning: false
 npmRebuild: false
 asarUnpack:
   - node_modules/**/*.node
@@ -21,13 +22,14 @@ mac:
   target: [dmg, zip]
   minimumSystemVersion: '14.0'
   hardenedRuntime: true
-  notarize: true
+  identity: '-'
+  notarize: false
   entitlements: desktop/entitlements.mac.plist
 win:
   icon: desktop/icons/icon.ico
   target: [nsis]
   signExts: ['.exe', '.dll', '.pyd', '.node']
-  verifyUpdateCodeSignature: true
+  verifyUpdateCodeSignature: false
 nsis:
   oneClick: false
   perMachine: false
