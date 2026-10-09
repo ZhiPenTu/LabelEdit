@@ -23,6 +23,7 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CSC_FOR_PULL_REQUEST: 'true'
       COMMERCE_DESKTOP_SIGNING: unsigned
     steps:
       - uses: actions/checkout@v4

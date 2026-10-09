@@ -23,6 +23,7 @@ export function packagingEnvironment(mode, source = process.env) {
     // A configured certificate must not silently change an unsigned build.
     for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'CSC_WIN_LINK', 'CSC_WIN_KEY_PASSWORD', 'CSC_NAME', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) delete env[name];
     env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
+    env.CSC_FOR_PULL_REQUEST = 'true';
   }
   return env;
 }
