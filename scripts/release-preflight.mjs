@@ -18,4 +18,4 @@ for(const name of required) if(!process.env[name]) throw new Error('正式发布
 if(createPublicKey(process.env.COMMERCE_PLUGIN_SIGNING_KEY).asymmetricKeyType!=='ed25519')throw new Error('插件签名密钥必须为 Ed25519。');
 if(createPublicKey(process.env.COMMERCE_PLUGIN_SIGNING_KEY).export({format:'pem',type:'spki'}).trim()!==process.env.COMMERCE_PLUGIN_PUBLIC_KEY.trim()) throw new Error('插件签名公私钥不匹配。');
 console.log(mode==='validation'?'验收配置检查通过，仅上传验收制品，不公开发布。':'发布配置检查通过。');
-console.log(signing==='signed'?'正式签名模式：证书有效性仍须由签名和系统验证确认。':'GitHub 未签名分发模式：手动下载安装更新，插件市场签名仍为必需。');
+console.log(signing==='signed'?'正式签名模式：证书有效性仍须由签名和系统验证确认。':'GitHub 未签名分发模式：应用内下载并安装更新，插件市场签名仍为必需。');

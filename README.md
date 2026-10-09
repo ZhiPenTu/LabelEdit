@@ -28,7 +28,7 @@ npm run desktop:start
 
 ## 插件与架构
 
-底座直接依赖官方 `@deepseek-ai/dsh@0.2.1-alpha.1` 及完整锁定的依赖树，通过自定义 `commerce-desktop` Profile 和 Bundle 启动内核，自有 React 界面提供工具中心、市场、插件管理、设置和手动更新入口。
+底座直接依赖官方 `@deepseek-ai/dsh@0.2.1-alpha.1` 及完整锁定的依赖树，通过自定义 `commerce-desktop` Profile 和 Bundle 启动内核，自有 React 界面提供工具中心、市场、插件管理、设置和应用内更新入口（下载进度、安装并重启）。
 
 工具网页运行于独立、关闭 Node 集成的沙箱页面。本地程序经 macOS Seatbelt 或 Windows AppContainer + Job Object 启动；系统沙箱不可用时拒绝运行。文件、网络与凭据通过宿主代理授权，第三方代码不加载进内核进程。
 

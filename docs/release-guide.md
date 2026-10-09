@@ -27,25 +27,29 @@ npm run desktop:start
 
 ## GitHub 分发配置
 
+版本规则：默认只递增最后一位补丁号，例如 `0.2.2 → 0.2.3`。未经用户明确许可，不得提升主版本号或次版本号；发布请求本身不代表允许大版本升级。
+
 按用户 2026-10-09 的补充决定，当前从 GitHub 发布未签名桌面安装包，不上架 App Store。Apple Developer ID、Apple 公证和 Windows 发布者证书不是当前发布前置条件。macOS Apple Silicon 使用运行所需的 ad-hoc 签名，不代表 Apple 认证了发布者；未签名 Windows 安装包和未经公证的 Mac 应用可能显示系统安全提示。
 
 必需配置只有 GitHub Secret `COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）和 Repository variable `COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM），两者必须匹配。生产密钥已配置，私钥只保留在用户受保护的存储与 Secrets 中，不进入源码。插件市场签名和沙箱隔离仍为必需。remove.bg 密钥属于用户应用设置，不放入 CI，其真实 API 验收暂缓。
 
-在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.2`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
+在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.3`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
 
 v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独立工作目录并清除 `NODE_PATH` / `NODE_OPTIONS` 后启动。不得让源码仓库中的依赖参与验收。Harness 启动接口的必需 peer dependencies 明确列入桌面生产依赖；缺失依赖必须导致这项验收失败。
 
 `release-commerce.yml` 拒绝缺失或不匹配的插件密钥、验收版本与发布标签不一致的构建。完成最低支持系统验收后，推送匹配版本的 `v<version>` 标签，再重新构建并发布 GitHub Release；只有标签触发的发布任务具有仓库写入权限。标签发布读取 Repository variable `COMMERCE_DESKTOP_SIGNING`，未设置时默认 `unsigned`。更新说明取 `docs/releases/v<version>.md`。
 
-未签名底座通过 GitHub 最新公开 Release API 检查更新，只展示该版日志；检查到适用当前系统的安装包后，打开固定仓库、对应版本的下载页供用户手动安装。没有公开版本、包尚未上传、网络失败和限流都有明确反馈，不自动重试，不执行自动下载或安装。最低支持系统验收包括 macOS 14/Windows 10 安装与真实沙箱、旧底座→新底座的手动安装更新、检查失败后的重试和已安装插件/配置保留。v0.2.0 已按用户发布指令公开；最低支持系统的手动验收仍未完成，不能标记为通过。
+更新页在用户点击「下载并重启更新」后显示下载百分比及已下载大小，下载完成后自动安装并重启。未签名 macOS 底座从固定 GitHub 仓库读取最新正式 Release，只展示该版日志，选择 Apple Silicon ZIP，并流式校验 GitHub 提供的 SHA-256 和大小；随后用 ditto 解压，校验应用标识、版本及 ad-hoc 签名。独立助手等待旧进程退出，在同一文件系统替换应用，替换或启动交接失败时尝试恢复旧版，并在下次启动显示错误。Windows 和正式签名构建使用 electron-updater 的完整性/签名校验及安装流程，Windows 静默安装后自动运行。用户数据和插件保留在原目录。下载前提示保存文件；下载或校验失败可手动重试，切换页面不会中断更新。
 
-打包仍保留 Electron `latest.yml` / `latest-mac.yml`，供以后启用正式签名模式时使用，不再生成旧 Tauri 清单。发布后将生成的 `commerce-market.json` 内容更新到 `market/catalog.json`。后续独立插件发布只更新制品和此目录，无需底座重新发版。
+macOS 必须从有写入权限的已安装应用目录更新；磁盘镜像、App Translocation 和只读目录会提示先移动应用。CI 必须保留 Mac ZIP、Windows EXE 和 latest*.yml；Mac ZIP 的 GitHub asset digest 及 size 必须有效，缺少校验信息时拒绝更新。旧版 v0.2.0–v0.2.2 不包含此下载逻辑，首次升级到包含此功能的版本仍需安装该版本一次。macOS 14/Windows 10 最低系统的真实安装升级验收仍未完成，不能标记为通过。
+
+打包保留 Electron `latest.yml` / `latest-mac.yml`，供 Windows 和正式签名模式更新使用，不再生成旧 Tauri 清单。发布后将生成的 `commerce-market.json` 内容更新到 `market/catalog.json`。后续独立插件发布只更新制品和此目录，无需底座重新发版。
 
 ## 可选的正式签名模式
 
 以后需要正式代码签名时，另配 GitHub Secrets：`MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`。当前 Windows 通道接收 PFX/P12；云签名证书需接入对应供应商流程。
 
-手动工作流选择 `signed`，或将 Repository variable `COMMERCE_DESKTOP_SIGNING` 设为 `signed` 后进行标签发布。该模式缺少任何平台证书就拒绝构建，要求 Apple 公证和正式签名验证通过；使用 `electron-builder.signed.yml`，打包资源记载 `signed` 模式，客户端才启用标准 Electron 自动下载与安装。必须另行完成两平台真实签名/更新验收。签名模式不改变 GitHub 发布渠道，也不涉及 App Store 上架。
+手动工作流选择 `signed`，或将 Repository variable `COMMERCE_DESKTOP_SIGNING` 设为 `signed` 后进行标签发布。该模式缺少任何平台证书就拒绝构建，要求 Apple 公证和正式签名验证通过；使用 `electron-builder.signed.yml`，打包资源记载 `signed` 模式，客户端使用要求发布者签名验证的标准 Electron 更新流程。必须另行完成两平台真实签名/更新验收。签名模式不改变 GitHub 发布渠道，也不涉及 App Store 上架。
 
 本地 `npm run build:desktop` 同样默认未签名。切换模式后必须重新运行 `platform:prepare`；`package-desktop.mjs` 会拒绝资源中的更新模式与打包模式不一致的构建，未签名模式忽略环境中的 Apple/Windows 证书，避免意外变成另一种安装包。
 

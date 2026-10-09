@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -11,7 +11,8 @@ import { Credentials } from './credentials.mjs';
 import updater from 'electron-updater';
 const { autoUpdater } = updater;
 import {validateCatalog} from './catalog.mjs';
-import {latestReleaseNotes, checkGitHubRelease, releaseDownloadPage} from './updates.mjs';
+import { UpdateService, nativeUpdateAdapter } from './update-service.mjs';
+import { macUpdateAdapter, previousUpdateError } from './mac-update.mjs';
 import {desktopSigningMode} from './distribution.mjs';
 // Resolve the established profile before changing the display name. This also
 // preserves an explicit --user-data-dir supplied by integration tests/users.
@@ -26,7 +27,7 @@ let window, manager, workers, files, credentials, network, host, quitting = fals
 const views = new Map(), owners = new Map(), kernelRequests = new Map(); let kernelCounter = 0; let visible = null, systems = [], kernelError = null;
 const pluginSessions = new Map();
 const viewQueues = new Map(), viewEpochs = new Map();
-const update = { status: 'idle', version: null, notes: '', error: null, progress: 0, delivery: 'manual' };
+let updateService;
 const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
 const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
 function changed() { if (window && !window.isDestroyed()) window.webContents.send('commerce:changed'); }
@@ -171,31 +172,17 @@ async function performPlatform(method, args) {
   if (method === 'plugins.rollback') { await manager.rollback(args.id); changed(); return; }
   if (method === 'market.list') return catalog();
   if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); changed(); return; }
-  if (method === 'updates.check') {
+  if (method === 'updates.check' || method === 'updates.download') {
     if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。');
-    if (update.delivery === 'automatic') { await autoUpdater.checkForUpdates(); return; }
-    if (update.status === 'checking') return;
-    Object.assign(update, { status: 'checking', version: null, notes: '', error: null }); changed();
-    try { Object.assign(update, await checkGitHubRelease(app.getVersion())); }
-    catch (error) { update.status = 'error'; update.error = error.message; throw error; }
-    finally { changed(); }
-    return;
-  }
-  if (method === 'updates.openRelease') {
-    if (update.delivery !== 'manual' || update.status !== 'available') throw new Error('没有可下载的手动更新。');
-    await shell.openExternal(releaseDownloadPage(update.version)); return;
-  }
-  if (method === 'updates.download' || method === 'updates.install') {
-    if (update.delivery !== 'automatic') throw new Error('此版本通过 GitHub 下载安装包后手动安装。');
-    if (method === 'updates.download') await autoUpdater.downloadUpdate();
-    else autoUpdater.quitAndInstall();
+    if (method === 'updates.check') updateService.check();
+    else updateService.download();
     return;
   }
   throw new Error('平台操作不受支持。');
 }
 ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
   assertFrame(event, true); validateCall(method, args);
-  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: systems.length === 7 ? await kernelRequest({type:'call',kind:'system',service:'home',method:'list',args:{}}) : (await manager.list()).map(sanitizePlugin), update, tabs: [...views.keys()] };
+  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: systems.length === 7 ? await kernelRequest({type:'call',kind:'system',service:'home',method:'list',args:{}}) : (await manager.list()).map(sanitizePlugin), update: updateService.state, tabs: [...views.keys()] };
   if (method === 'kernel.retry') { await startKernel(); return true; }
   if (method === 'view.open') return openView(args.id, args.settings);
   if (method === 'view.hide') { hideViews(); return; }
@@ -230,6 +217,14 @@ ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {
   }
   throw new Error('插件接口不受支持。');
 });
+async function shutdownRuntime() {
+  quitting = true;
+  await Promise.all([...views.keys()].map(closeView));
+  await workers.stopAll();
+  host?.postMessage({ type: 'shutdown' });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  host?.kill();
+}
 async function main() {
 await app.whenReady();
 await mkdir(app.getPath('userData'), { recursive: true });
@@ -238,7 +233,15 @@ workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, proc
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
 const distribution = JSON.parse(await readFile(path.join(generated, 'distribution.json'), 'utf8'));
-update.delivery = desktopSigningMode({ COMMERCE_DESKTOP_SIGNING: distribution.signing }) === 'signed' ? 'automatic' : 'manual';
+const signed = desktopSigningMode({ COMMERCE_DESKTOP_SIGNING: distribution.signing }) === 'signed';
+const receipt = path.join(app.getPath('userData'), 'update-error.txt');
+const adapter = process.platform === 'darwin' && !signed
+  ? macUpdateAdapter({ app, beforeInstall: shutdownRuntime, receipt })
+  : nativeUpdateAdapter(autoUpdater);
+updateService = new UpdateService(adapter, changed);
+autoUpdater.on('error', error => updateService.fail(error));
+const previousError = await previousUpdateError(receipt);
+if (previousError) updateService.fail(new Error(previousError));
 manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(generated, 'plugins'), {
   publicKey: marketConfig.publicKey, stop: closeView,
   probe: async plugin => { if (plugin.backend) { await workers.start(plugin); await workers.stop(plugin.id); } },
@@ -254,13 +257,16 @@ window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('co
 protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return resourceResponse(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))); } catch { return new Response('Not found', { status: 404 }); } });
 await window.loadURL(process.env.COMMERCE_DEV_URL || 'commerce://shell/index.html');
 void startKernel().catch(error => { kernelError = error.message; changed(); });
-if (update.delivery === 'automatic') {
-autoUpdater.autoDownload = false; autoUpdater.fullChangelog = false;
-for (const [event, status] of [['checking-for-update', 'checking'], ['update-not-available', 'current'], ['update-available', 'available'], ['update-downloaded', 'downloaded']]) autoUpdater.on(event, info => { update.status = status; update.error = null; if (info?.version) { update.version = info.version; update.notes = latestReleaseNotes(info); } changed(); });
-autoUpdater.on('download-progress', progress => { update.status = 'downloading'; update.progress = progress.percent; changed(); });
-autoUpdater.on('error', error => { update.status = 'error'; update.error = error.message; changed(); });
-}
-app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; void Promise.all([...views.keys()].map(closeView)).then(() => workers.stopAll()).finally(() => { host?.postMessage({ type: 'shutdown' }); setTimeout(() => { host?.kill(); app.quit(); }, 300); }); });
+app.on('before-quit', event => {
+  if (quitting) return;
+  event.preventDefault(); quitting = true;
+  const cancelDownload = ['downloading', 'extracting'].includes(updateService.state.status) && updateService.adapter.cancel;
+  if (cancelDownload) updateService.adapter.cancel();
+  void (async () => {
+    if (cancelDownload) await updateService.pending;
+    await shutdownRuntime();
+  })().catch(error => console.error('退出清理失败：', error.message)).finally(() => app.quit());
+});
 app.on('window-all-closed', () => app.quit());
 
 }
@@ -268,4 +274,4 @@ if (!primary) app.quit();
 else void main().catch(error => { console.error(error); app.quit(); });
 
 // Trusted main-process integration access; never exposed over renderer IPC.
-export { network, workers, manager, host };
+export { network, workers, manager, host, updateService };

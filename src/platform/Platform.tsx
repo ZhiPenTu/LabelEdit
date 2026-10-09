@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Boxes, Store, Puzzle, Settings, RefreshCw, ArrowRight, Plus, X, Search, ShieldCheck, AlertCircle, ChevronRight, Monitor, Moon, Sun, LoaderCircle, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
@@ -13,11 +13,11 @@ import { cn } from '@/lib/utils';
 import brandIcon from '@/assets/qingzuo.png';
 import workspaceArt from '@/assets/workspace.png';
 import { version } from '../../package.json';
-const ReleaseNotes = lazy(() => import('@/components/ReleaseNotes'));
+import { UpdateCard, type UpdateState } from './UpdateCard';
 type Page = 'home' | 'market' | 'plugins' | 'settings' | 'updates';
-interface Status { version: string; kernel: { ready: boolean; error: string | null; version: string; systems: { id: string; title: string; protected: boolean }[] }; plugins: Plugin[]; tabs: string[]; update: { status: string; version: string | null; notes: string; error: string | null; progress: number; delivery: 'manual' | 'automatic' } }
+interface Status { version: string; kernel: { ready: boolean; error: string | null; version: string; systems: { id: string; title: string; protected: boolean }[] }; plugins: Plugin[]; tabs: string[]; update: UpdateState }
 const navigation = [{ id: 'home', title: '工具中心', icon: Boxes }, { id: 'market', title: '插件市场', icon: Store }, { id: 'plugins', title: '插件管理', icon: Puzzle }, { id: 'settings', title: '设置', icon: Settings }, { id: 'updates', title: '更新', icon: RefreshCw }] as const;
-const preview: Status = { version, kernel: { ready: false, error: null, version: '0.2.1-alpha.1', systems: [] }, plugins: [{ id: 'official.labeledit', title: 'LabelEdit', description: '本地 PDF 标签编辑、文字识别与导出', category: '标签与文档', version: '0.1.1', enabled: true, source: 'bundled', local: true, missing: [] }], tabs: [], update: { status: 'idle', version: null, notes: '', error: null, progress: 0, delivery: 'manual' } };
+const preview: Status = { version, kernel: { ready: false, error: null, version: '0.2.1-alpha.1', systems: [] }, plugins: [{ id: 'official.labeledit', title: 'LabelEdit', description: '本地 PDF 标签编辑、文字识别与导出', category: '标签与文档', version: '0.1.1', enabled: true, source: 'bundled', local: true, missing: [] }], tabs: [], update: { status: 'idle', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0 } };
 const pageCopy = {
   home: ['让日常工作，轻一点。', '把顺手的工具放在一起，专注每一次创作。'],
   market: ['让工作台，多一点可能。', '找到适合你的工具，按需安装，独立更新。'],
@@ -105,7 +105,7 @@ export default function Platform() {
           <div className="commerce-info"><ShieldCheck /><div><strong>{page === 'market' ? '插件签名验证' : '你的工作台，由你掌握'}</strong><p>{page === 'market' ? '从签名目录安装工具，管理你自己的工作台。' : '本地工具在本机处理文件，联网插件按授权访问服务。'}</p></div></div>
         </> : null}
         {page === 'settings' ? <div className="commerce-settings"><Card><CardHeader><CardTitle role="heading" aria-level={2}>外观</CardTitle><CardDescription>为工作台选择舒适的显示方式。</CardDescription></CardHeader><CardContent><div className="theme-options" role="group" aria-label="主题">{([{ value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }, { value: 'system', label: '跟随系统', icon: Monitor }] as const).map(({ value, label, icon: Icon }) => <Button key={value} variant={theme === value ? 'secondary' : 'outline'} aria-pressed={theme === value} onClick={() => setTheme(value)}><Icon />{label}</Button>)}</div></CardContent></Card><Card><CardHeader><CardTitle role="heading" aria-level={2}>运行环境</CardTitle><CardDescription>轻作与本地平台服务。</CardDescription></CardHeader><CardContent><dl className="runtime-info"><div><dt>轻作</dt><dd>v{status.version}</dd></div><div><dt>Harness</dt><dd>{status.kernel.version}</dd></div><div><dt>运行状态</dt><dd>{status.kernel.ready ? '内核运行正常' : desktop ? '内核尚未就绪' : '浏览器预览不启动本地内核'}</dd></div></dl><div className="runtime-systems">{status.kernel.systems.map(s => <Badge key={s.id} variant="secondary">{s.title}</Badge>)}</div></CardContent></Card></div> : null}
-        {page === 'updates' ? <Card className="updates-card"><CardHeader><span className="update-icon"><RefreshCw /></span><CardTitle role="heading" aria-level={2}>轻作更新</CardTitle><CardDescription>当前版本 v{status.version}</CardDescription></CardHeader><CardContent><p>{status.update.status === 'unpublished' ? '尚无公开发布的底座版本。' : status.update.status === 'current' ? '当前已是最新版本。' : status.update.version ? '检测到版本 v' + status.update.version : '手动检查是否有新版本。'}</p>{status.update.delivery === 'manual' ? <p className="text-sm text-muted-foreground">从 GitHub 下载新版安装包后手动安装。</p> : null}{status.update.notes ? <Suspense fallback={<span>加载更新说明…</span>}><ReleaseNotes body={status.update.notes} /></Suspense> : null}{status.update.error ? <Alert variant="destructive"><AlertCircle /><AlertDescription>{status.update.error}</AlertDescription></Alert> : null}</CardContent><CardFooter className="flex flex-wrap gap-2"><Button disabled={!desktop || busy || status.update.status === 'checking'} onClick={() => act('updates.check')}>{status.update.status === 'checking' ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <RefreshCw data-icon="inline-start" />}检查更新</Button>{status.update.status === 'available' ? <Button variant="outline" disabled={busy} onClick={() => act(status.update.delivery === 'manual' ? 'updates.openRelease' : 'updates.download')}>{status.update.delivery === 'manual' ? '打开 GitHub 下载页' : '下载更新'}</Button> : null}{status.update.delivery === 'automatic' && status.update.status === 'downloading' ? <span>下载 {Math.round(status.update.progress)}%</span> : null}{status.update.delivery === 'automatic' && status.update.status === 'downloaded' ? <Button disabled={busy} onClick={() => act('updates.install')}>安装并重启</Button> : null}</CardFooter></Card> : null}
+        {page === 'updates' ? <UpdateCard version={status.version} update={status.update} disabled={!desktop || busy} onAction={act} /> : null}
       </div></main> : <div ref={surface} className={cn('commerce-plugin-surface', !status.kernel.ready && 'opacity-50')} />}
     </div>
   </div>;
