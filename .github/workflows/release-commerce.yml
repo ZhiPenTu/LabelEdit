@@ -125,4 +125,4 @@ jobs:
       - name: Publish validated release
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" release/desktop/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "Commerce Tools $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+          gh release create "$GITHUB_REF_NAME" release/desktop/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"

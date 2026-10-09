@@ -1,5 +1,5 @@
 import {test,expect,_electron as electron} from '@playwright/test';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import os from 'node:os';import path from 'node:path';
+import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import os from 'node:os';import path from 'node:path';
 import {observeApplication} from './diagnostics.mjs';
 import {assertRendererNetworkBlocked} from '../fixtures/renderer-network-probe.mjs';
 const root=process.cwd(),cli=path.join(root,'packages/plugin-sdk/cli.mjs');
@@ -11,6 +11,9 @@ test('desktop tool tabs, isolated native/web plugin import, offline LabelEdit, c
  try{
   for(const [name,native] of [['test-web',false],['test-native',true]]) {execFileSync(process.execPath,[cli,'create',name,...(native?['--native']:[])],{cwd:temporary});execFileSync(process.execPath,[cli,'pack',path.join(temporary,name),path.join(temporary,name+'.ecplugin')]);}
   app=await electron.launch({args:[root,'--user-data-dir='+path.join(temporary,'data')],timeout:20000});observeApplication(app);const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
+  const identity=await app.evaluate(({app})=>({name:app.getName(),profile:app.getPath('userData')}));expect(identity.name).toBe('Qingzuo');
+  // Electron may return a Windows 8.3 alias or a macOS /private/var alias.
+  expect(await realpath(identity.profile)).toBe(await realpath(path.join(temporary,'data')));
   await page.screenshot({path:'output/electron-tests/home.png'});
   await importPlugin(app,page,path.join(temporary,'test-native.ecplugin'));await expect(page.getByRole('heading',{name:'test-native',exact:true})).toBeVisible();
   await page.locator('[data-slot="card"]').filter({hasText:'test-native'}).getByRole('button',{name:'打开工具'}).click();const native=await pluginPage(app,'local.test-native');await native.getByRole('button',{name:'运行示例'}).click();await expect(native.getByRole('status')).toHaveText('插件服务调用成功');

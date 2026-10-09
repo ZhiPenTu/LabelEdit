@@ -31,7 +31,7 @@ npm run desktop:start
 
 必需配置只有 GitHub Secret `COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）和 Repository variable `COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM），两者必须匹配。生产密钥已配置，私钥只保留在用户受保护的存储与 Secrets 中，不进入源码。插件市场签名和沙箱隔离仍为必需。remove.bg 密钥属于用户应用设置，不放入 CI，其真实 API 验收暂缓。
 
-在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.1`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
+在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.2`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
 
 v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独立工作目录并清除 `NODE_PATH` / `NODE_OPTIONS` 后启动。不得让源码仓库中的依赖参与验收。Harness 启动接口的必需 peer dependencies 明确列入桌面生产依赖；缺失依赖必须导致这项验收失败。
 
@@ -58,3 +58,7 @@ v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独�
 ## Electron 与原生内核适配
 
 固定 Electron 44.0.0 与官方 `node-addon-require-builtin@0.1.6`，该组合在上游支持列表内。原生依赖官方 macOS 预编译包的最低部署版本为 15.0；构建时从固定上游提交（SHA-256 校验）编译未修改的 N-API 源码，目标为 macOS 14.0。原生源码不进入本仓库，也不在用户安装插件时编译。macOS 开发需 Xcode 命令行工具。全部随包 Mach-O 都检查实际部署版本，Electron 或适配器更新必须一起完成内核与桌面回归。
+
+## 轻作更名兼容性
+
+v0.2.2 起应用产品名为 Qingzuo、中文界面为轻作，macOS 应用包和 Windows 可执行文件随之更名。沿用原 appId、用户数据目录、插件 ID 与 CommerceTools 安装包文件名，旧版更新检查仍可发现新版本。LabelEdit 独立插件随新界面升级为 0.1.1。

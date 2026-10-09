@@ -21,7 +21,7 @@ export function Inspector({ region, saved, draft, updateDraft, busy, applying, e
   return <aside className="inspector" aria-label="编辑文字">
     <h2>编辑文字</h2>
     {region && draft ? <form className="edit-form" onSubmit={event => { event.preventDefault(); if (!invalidSize) onApply(draft); }}>
-      <FieldGroup>
+      <FieldGroup className="edit-fields">
         <Field><FieldLabel>原文字</FieldLabel><div className="original-text">{region.text || '手动框选区域'}</div></Field>
         <Field data-disabled={busy}><FieldLabel htmlFor="replacement-text">替换为</FieldLabel><Textarea id="replacement-text" aria-label="替换为" rows={3} value={draft.text} onChange={event => updateDraft('text', event.target.value)} disabled={busy} /></Field>
         <Field data-disabled={busy}><FieldLabel htmlFor="font-family">字体</FieldLabel><Select items={FONTS} value={draft.font_family} onValueChange={value => { if (value === 'Arial' || value === 'Noto Sans SC') updateDraft('font_family', value); }} disabled={busy}>

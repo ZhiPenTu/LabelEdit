@@ -5,8 +5,8 @@ import path from 'node:path';
 import { desktopSigningMode } from '../desktop/distribution.mjs';
 
 const sourceExecutable = path.resolve(process.argv[2] || (process.platform === 'darwin'
-  ? 'release/desktop/mac-arm64/Commerce Tools.app/Contents/MacOS/Commerce Tools'
-  : 'release/desktop/win-unpacked/Commerce Tools.exe'));
+  ? 'release/desktop/mac-arm64/Qingzuo.app/Contents/MacOS/Qingzuo'
+  : 'release/desktop/win-unpacked/Qingzuo.exe'));
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'commerce-packaged-'));
 let app;
 try {
