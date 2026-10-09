@@ -62,6 +62,7 @@ jobs:
           else
             npx electron-builder --win --x64 --publish never --config electron-builder.yml -c.forceCodeSigning=true
           fi
+          node scripts/test-packaged-desktop.mjs
       - name: Verify production signatures
         run: node scripts/verify-signatures.mjs
       - name: Build independently signed plugin artifacts

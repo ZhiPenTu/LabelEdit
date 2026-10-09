@@ -68,6 +68,7 @@ jobs:
           else
             npx electron-builder --dir --win --x64 --publish never --config electron-builder.yml
           fi
+          node scripts/test-packaged-desktop.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
