@@ -81,6 +81,8 @@ test('unsigned packaging discards ambient certificates and signed packaging rest
  const unsigned=packagingEnvironment('unsigned',source);
  for(const name of ['CSC_LINK','CSC_KEY_PASSWORD','CSC_WIN_LINK','APPLE_ID'])assert.equal(unsigned[name],undefined);
  assert.equal(unsigned.COMMERCE_PLUGIN_SIGNING_KEY,'plugin-key');
+ assert.equal(unsigned.CSC_IDENTITY_AUTO_DISCOVERY,'false');
+ assert.equal(unsigned.CSC_FOR_PULL_REQUEST,'true');
  assert.equal(packagingEnvironment('signed',source).CSC_LINK,source.CSC_LINK);
  assert.equal(source.CSC_LINK,'existing-certificate');
  assert.ok(packagingOptions('unsigned','darwin').includes('electron-builder.yml'));

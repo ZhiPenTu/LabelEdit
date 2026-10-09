@@ -27,13 +27,13 @@ npm run desktop:start
 
 ## GitHub 分发配置
 
-版本规则：默认只递增最后一位补丁号，例如 `0.2.3 → 0.2.4`。未经用户明确许可，不得提升主版本号或次版本号；发布请求本身不代表允许大版本升级。
+版本规则：默认只递增最后一位补丁号，例如 `0.2.4 → 0.2.5`。未经用户明确许可，不得提升主版本号或次版本号；发布请求本身不代表允许大版本升级。
 
 按用户 2026-10-09 的补充决定，当前从 GitHub 发布未签名桌面安装包，不上架 App Store。Apple Developer ID、Apple 公证和 Windows 发布者证书不是当前发布前置条件。macOS Apple Silicon 使用运行所需的 ad-hoc 签名，不代表 Apple 认证了发布者；未签名 Windows 安装包和未经公证的 Mac 应用可能显示系统安全提示。
 
 必需配置只有 GitHub Secret `COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）和 Repository variable `COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM），两者必须匹配。生产密钥已配置，私钥只保留在用户受保护的存储与 Secrets 中，不进入源码。插件市场签名和沙箱隔离仍为必需。remove.bg 密钥属于用户应用设置，不放入 CI，其真实 API 验收暂缓。
 
-在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.4`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
+在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.5`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
 
 v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独立工作目录并清除 `NODE_PATH` / `NODE_OPTIONS` 后启动。不得让源码仓库中的依赖参与验收。Harness 启动接口的必需 peer dependencies 明确列入桌面生产依赖；缺失依赖必须导致这项验收失败。
 
