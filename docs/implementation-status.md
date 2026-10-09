@@ -14,7 +14,7 @@
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
 | 市场 | 线上目录、签名制品与发布工具完成；生产签名密钥和正式目录内容尚待发布 |
-| 正式更新和发布 | Electron 标准更新、最新日志、签名预检和发布 CI 完成；正式签名/安装升级实测尚待凭据 |
+| 正式更新和发布 | Electron 标准更新、最新日志、签名预检和发布 CI 完成；支持先手动构建签名验收制品，手动路径不公开发布且无仓库写入权限；正式签名/安装升级实测尚待凭据 |
 | 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归通过两平台 CI |
 
 ## 已通过的本地命令
@@ -23,7 +23,7 @@
 - `npm test`：13 个前端测试。
 - `python -m pytest -q`：11 个测试及 4 个子测试，包含 Python 框架资源转换与越界/循环链接拒绝。
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
-- `npm run test:platform`：21 个测试：真实内核、进程沙箱、系统凭据、包管理、代理及打包 RPC 回归。
+- `npm run test:platform`：24 个测试：真实内核、进程沙箱、系统凭据、包管理、代理、打包 RPC 与签名构建/发布门槛回归。
 - `node scripts/test-plugin-navigation.mjs`：不接入调试器的真实应用检查，连续并发打开网页工具，在本地服务运行时再打开工具，验证同一插件只有一个页面、WebRTC 的真实 TCP/UDP 请求被阻止及关闭后释放处理进程；Windows 额外检查桌面可执行文件 ACL 不受插件影响。
 - `npm run test:desktop`：2 个测试：真实 Electron 导入、隔离（含 WebRTC TCP/UDP 探测）、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理与市场恢复。
 - `node scripts/test-packaged-desktop.mjs`：直接启动分发目录内的应用，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
@@ -38,4 +38,4 @@ Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真
 
 ## macOS 14 运行资源
 
-当前 Python/OCR 运行资源的 267 个 Mach-O 部署版本检查通过；完整 `.app` 的 295 个 Mach-O 均支持部署目标 macOS 14.0。数量包含已转换为普通文件的内部库别名。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。
+本地 Python/OCR 运行资源的 267 个 Mach-O、完整 `.app` 的 295 个 Mach-O 部署版本检查通过；GitHub CI 的 Python 框架构建分别为 323 和 351 个，均支持部署目标 macOS 14.0。数量包含已转换为普通文件的内部库及框架别名。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。

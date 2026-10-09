@@ -27,7 +27,9 @@ npm run desktop:start
 
 GitHub Secrets：`MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`、`COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）。Repository variable：`COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM）。私钥只保留在用户受保护的存储与 Secrets 中。remove.bg 密钥由用户在插件页面保存到系统凭据库，不放入 CI。
 
-`release-commerce.yml` 会先拒绝缺少签名配置或标签不一致的构建，然后运行测试、签名全部运行资源、验证签名和 notarization、构建独立签名插件并生成各平台目录，最后发布 GitHub Release。更新说明取 `docs/releases/v<version>.md`；客户端只展示目标最新一版。
+配置凭据后，在 GitHub Actions 手动运行 `Release signed commerce desktop`，选择待验收源码分支并输入与 `package.json` 相同的版本（当前 `0.2.0`）。这条路径运行完整测试、正式签名与 notarization、签名验证以及独立插件打包，只上传 `signed-macOS` / `signed-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动构建的任务只具有仓库读取权限。
+
+`release-commerce.yml` 会拒绝缺少签名配置、验收版本或发布标签不一致的构建。完成下面的真实验收后，推送匹配版本的 `v<version>` 标签，再重新构建并发布 GitHub Release；只有标签触发的发布任务具有仓库写入权限。更新说明取 `docs/releases/v<version>.md`；客户端只展示目标最新一版。
 
 正式发布前手动完成最低支持系统安装、标准 Electron 更新（旧底座→新底座）、下载失败与恢复、真实 remove.bg 单图/缺少密钥/额度/取消/网络失败验收。标签发布只应在这些门槛通过后进行。当前证书和 API 凭据按用户决定稍后配置。
 
