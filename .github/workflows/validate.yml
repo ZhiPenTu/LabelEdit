@@ -23,6 +23,7 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      COMMERCE_DESKTOP_SIGNING: unsigned
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,12 +64,8 @@ jobs:
       - name: Package Electron application (validation only)
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            npx electron-builder --dir --mac --arm64 --publish never --config electron-builder.yml -c.mac.identity=null -c.mac.notarize=false
-            node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"
-          else
-            npx electron-builder --dir --win --x64 --publish never --config electron-builder.yml
-          fi
+          node scripts/package-desktop.mjs --dir
+          if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"; fi
           node scripts/test-packaged-desktop.mjs
       - uses: actions/upload-artifact@v4
         if: always()

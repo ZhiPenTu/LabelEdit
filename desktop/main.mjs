@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess } from 'electron';
+import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, shell, utilityProcess } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -11,7 +11,8 @@ import { Credentials } from './credentials.mjs';
 import updater from 'electron-updater';
 const { autoUpdater } = updater;
 import {validateCatalog} from './catalog.mjs';
-import {latestReleaseNotes} from './updates.mjs';
+import {latestReleaseNotes, checkGitHubRelease, releaseDownloadPage} from './updates.mjs';
+import {desktopSigningMode} from './distribution.mjs';
 app.setName('Commerce Tools');
 const primary = app.requestSingleInstanceLock();
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -20,7 +21,7 @@ let window, manager, workers, files, credentials, network, host, quitting = fals
 const views = new Map(), owners = new Map(), kernelRequests = new Map(); let kernelCounter = 0; let visible = null, systems = [], kernelError = null;
 const pluginSessions = new Map();
 const viewQueues = new Map(), viewEpochs = new Map();
-const update = { status: 'idle', version: null, notes: '', error: null, progress: 0 };
+const update = { status: 'idle', version: null, notes: '', error: null, progress: 0, delivery: 'manual' };
 const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
 const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
 function changed() { if (window && !window.isDestroyed()) window.webContents.send('commerce:changed'); }
@@ -165,9 +166,26 @@ async function performPlatform(method, args) {
   if (method === 'plugins.rollback') { await manager.rollback(args.id); changed(); return; }
   if (method === 'market.list') return catalog();
   if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); changed(); return; }
-  if (method === 'updates.check') { if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。'); await autoUpdater.checkForUpdates(); return; }
-  if (method === 'updates.download') { await autoUpdater.downloadUpdate(); return; }
-  if (method === 'updates.install') { autoUpdater.quitAndInstall(); return; }
+  if (method === 'updates.check') {
+    if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。');
+    if (update.delivery === 'automatic') { await autoUpdater.checkForUpdates(); return; }
+    if (update.status === 'checking') return;
+    Object.assign(update, { status: 'checking', version: null, notes: '', error: null }); changed();
+    try { Object.assign(update, await checkGitHubRelease(app.getVersion())); }
+    catch (error) { update.status = 'error'; update.error = error.message; throw error; }
+    finally { changed(); }
+    return;
+  }
+  if (method === 'updates.openRelease') {
+    if (update.delivery !== 'manual' || update.status !== 'available') throw new Error('没有可下载的手动更新。');
+    await shell.openExternal(releaseDownloadPage(update.version)); return;
+  }
+  if (method === 'updates.download' || method === 'updates.install') {
+    if (update.delivery !== 'automatic') throw new Error('此版本通过 GitHub 下载安装包后手动安装。');
+    if (method === 'updates.download') await autoUpdater.downloadUpdate();
+    else autoUpdater.quitAndInstall();
+    return;
+  }
   throw new Error('平台操作不受支持。');
 }
 ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
@@ -214,6 +232,8 @@ credentials = new Credentials(launcher, 'profile.' + createHash('sha256').update
 workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
+const distribution = JSON.parse(await readFile(path.join(generated, 'distribution.json'), 'utf8'));
+update.delivery = desktopSigningMode({ COMMERCE_DESKTOP_SIGNING: distribution.signing }) === 'signed' ? 'automatic' : 'manual';
 manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(generated, 'plugins'), {
   publicKey: marketConfig.publicKey, stop: closeView,
   probe: async plugin => { if (plugin.backend) { await workers.start(plugin); await workers.stop(plugin.id); } },
@@ -229,10 +249,12 @@ window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('co
 protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return resourceResponse(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))); } catch { return new Response('Not found', { status: 404 }); } });
 await window.loadURL(process.env.COMMERCE_DEV_URL || 'commerce://shell/index.html');
 void startKernel().catch(error => { kernelError = error.message; changed(); });
+if (update.delivery === 'automatic') {
 autoUpdater.autoDownload = false; autoUpdater.fullChangelog = false;
 for (const [event, status] of [['checking-for-update', 'checking'], ['update-not-available', 'current'], ['update-available', 'available'], ['update-downloaded', 'downloaded']]) autoUpdater.on(event, info => { update.status = status; update.error = null; if (info?.version) { update.version = info.version; update.notes = latestReleaseNotes(info); } changed(); });
 autoUpdater.on('download-progress', progress => { update.status = 'downloading'; update.progress = progress.percent; changed(); });
 autoUpdater.on('error', error => { update.status = 'error'; update.error = error.message; changed(); });
+}
 app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; void Promise.all([...views.keys()].map(closeView)).then(() => workers.stopAll()).finally(() => { host?.postMessage({ type: 'shutdown' }); setTimeout(() => { host?.kill(); app.quit(); }, 300); }); });
 app.on('window-all-closed', () => app.quit());
 

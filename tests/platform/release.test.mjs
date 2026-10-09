@@ -6,10 +6,12 @@ import {generateKeyPairSync} from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import {load} from 'js-yaml';
+import {desktopSigningMode,packagingOptions,packagingEnvironment} from '../../desktop/distribution.mjs';
 const script=path.resolve('scripts/release-preflight.mjs');
 const keys=generateKeyPairSync('ed25519');
 const alternate=generateKeyPairSync('ed25519');
 const fixture={
+ COMMERCE_DESKTOP_SIGNING:'signed',
  CSC_LINK:'fixture-certificate-reference',CSC_KEY_PASSWORD:'fixture-password',
  APPLE_ID:'fixture@example.test',APPLE_APP_SPECIFIC_PASSWORD:'fixture-password',APPLE_TEAM_ID:'fixture-team',
  COMMERCE_PLUGIN_SIGNING_KEY:keys.privateKey.export({format:'pem',type:'pkcs8'}),
@@ -24,11 +26,16 @@ async function directory(){const cwd=await mkdtemp(path.join(os.tmpdir(),'commer
 const publish={GITHUB_EVENT_NAME:'push',GITHUB_REF_TYPE:'tag',GITHUB_REF_NAME:'v0.2.0'};
 const validation={GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF_TYPE:'branch',GITHUB_REF_NAME:'main',COMMERCE_VALIDATION_VERSION:'0.2.0'};
 
-test('standalone signing preflight accepts version-matched manual validation and public tag builds',async()=>{
+test('release preflight accepts signed validation and tag builds, and unsigned builds without certificates',async()=>{
  const cwd=await directory();
  try{
   const manual=run(cwd,validation);assert.equal(manual.status,0,manual.stderr);assert.match(manual.stdout,/仅上传验收制品，不公开发布/);
   const release=run(cwd,publish);assert.equal(release.status,0,release.stderr);assert.match(release.stdout,/发布配置检查通过/);
+  const certificates={CSC_LINK:undefined,CSC_KEY_PASSWORD:undefined,APPLE_ID:undefined,APPLE_APP_SPECIFIC_PASSWORD:undefined,APPLE_TEAM_ID:undefined};
+  for(const event of [validation,publish]){
+   const unsigned=run(cwd,{...event,...certificates,COMMERCE_DESKTOP_SIGNING:undefined});assert.equal(unsigned.status,0,unsigned.stderr);assert.match(unsigned.stdout,/GitHub 未签名分发模式/);
+   const noPluginKey=run(cwd,{...event,...certificates,COMMERCE_DESKTOP_SIGNING:'unsigned',COMMERCE_PLUGIN_SIGNING_KEY:undefined});assert.notEqual(noPluginKey.status,0);assert.match(noPluginKey.stderr,/缺少配置：COMMERCE_PLUGIN_SIGNING_KEY/);
+  }
  }finally{await rm(cwd,{recursive:true,force:true});}
 });
 
@@ -41,8 +48,10 @@ test('signing preflight refuses missing credentials, wrong keys, unversioned eve
    ['mismatched plugin key',{...validation,COMMERCE_PLUGIN_PUBLIC_KEY:alternate.publicKey.export({format:'pem',type:'spki'})},/公私钥不匹配/],
    ['wrong tag',{...publish,GITHUB_REF_NAME:'v0.3.0'},/发布标签与底座版本不一致/],
    ['branch push',{...publish,GITHUB_REF_TYPE:'branch',GITHUB_REF_NAME:'main'},/仅支持手动验收/],
-   ['manual wrong version',{...validation,COMMERCE_VALIDATION_VERSION:'0.3.0'},/签名验收版本与底座版本不一致/],
-   ['manual missing version',{...validation,COMMERCE_VALIDATION_VERSION:undefined},/签名验收版本与底座版本不一致/],
+   ['manual wrong version',{...validation,COMMERCE_VALIDATION_VERSION:'0.3.0'},/验收版本与底座版本不一致/],
+   ['manual missing version',{...validation,COMMERCE_VALIDATION_VERSION:undefined},/验收版本与底座版本不一致/],
+   ['unknown signing mode',{...validation,COMMERCE_DESKTOP_SIGNING:'optional'},/桌面签名模式必须/],
+   ['unsigned wrong plugin key',{...validation,COMMERCE_DESKTOP_SIGNING:'unsigned',COMMERCE_PLUGIN_PUBLIC_KEY:alternate.publicKey.export({format:'pem',type:'spki'})},/公私钥不匹配/],
    ['unknown event',{...validation,GITHUB_EVENT_NAME:'pull_request'},/仅支持手动验收/],
   ];
   if(process.platform==='darwin')cases.push(['missing Apple account',{...validation,APPLE_ID:undefined},/缺少配置：APPLE_ID/]);
@@ -53,12 +62,31 @@ test('signing preflight refuses missing credentials, wrong keys, unversioned eve
  }finally{await rm(cwd,{recursive:true,force:true});}
 });
 
-test('manual signed-build workflow cannot reach the write-enabled public release job',async()=>{
+test('manual build workflow defaults to unsigned, preserves plugin signing and cannot publish',async()=>{
  const workflow=load(await readFile('.github/workflows/release-commerce.yml','utf8'));
  assert.equal(workflow.on.workflow_dispatch.inputs.version.required,true);
- assert.equal(workflow.jobs.signed.env.COMMERCE_VALIDATION_VERSION,'${{ inputs.version }}');
+ assert.equal(workflow.on.workflow_dispatch.inputs.signing.default,'unsigned');
+ assert.equal(workflow.jobs.package.env.COMMERCE_VALIDATION_VERSION,'${{ inputs.version }}');
+ assert.match(workflow.jobs.package.env.COMMERCE_DESKTOP_SIGNING,/\|\| 'unsigned'/);
+ assert.equal(workflow.jobs.package.env.COMMERCE_PLUGIN_SIGNING_KEY,'${{ secrets.COMMERCE_PLUGIN_SIGNING_KEY }}');
  assert.deepEqual(workflow.permissions,{contents:'read'});
  assert.equal(workflow.jobs.publish.if,"${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}");
- assert.equal(workflow.jobs.publish.needs,'signed');
+ assert.equal(workflow.jobs.publish.needs,'package');
  assert.deepEqual(workflow.jobs.publish.permissions,{contents:'write'});
+});
+
+test('unsigned packaging discards ambient certificates and signed packaging restores native verification',async()=>{
+ const source={CSC_LINK:'existing-certificate',CSC_KEY_PASSWORD:'password',APPLE_ID:'account',CSC_WIN_LINK:'windows-certificate',CSC_IDENTITY_AUTO_DISCOVERY:'false',COMMERCE_PLUGIN_SIGNING_KEY:'plugin-key'};
+ assert.equal(desktopSigningMode({}),'unsigned');
+ const unsigned=packagingEnvironment('unsigned',source);
+ for(const name of ['CSC_LINK','CSC_KEY_PASSWORD','CSC_WIN_LINK','APPLE_ID'])assert.equal(unsigned[name],undefined);
+ assert.equal(unsigned.COMMERCE_PLUGIN_SIGNING_KEY,'plugin-key');
+ assert.equal(packagingEnvironment('signed',source).CSC_LINK,source.CSC_LINK);
+ assert.equal(source.CSC_LINK,'existing-certificate');
+ assert.ok(packagingOptions('unsigned','darwin').includes('electron-builder.yml'));
+ assert.ok(packagingOptions('signed','win32').includes('electron-builder.signed.yml'));
+ assert.throws(()=>packagingOptions('invalid','darwin'),/签名模式/);
+ const plain=load(await readFile('electron-builder.yml','utf8')),signed=load(await readFile('electron-builder.signed.yml','utf8'));
+ assert.equal(plain.mac.identity,'-');assert.equal(plain.mac.notarize,false);
+ assert.equal(signed.forceCodeSigning,true);assert.equal(signed.mac.notarize,true);assert.equal(signed.win.verifyUpdateCodeSignature,true);
 });
