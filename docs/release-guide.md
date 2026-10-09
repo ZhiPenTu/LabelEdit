@@ -31,7 +31,9 @@ npm run desktop:start
 
 必需配置只有 GitHub Secret `COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）和 Repository variable `COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM），两者必须匹配。生产密钥已配置，私钥只保留在用户受保护的存储与 Secrets 中，不进入源码。插件市场签名和沙箱隔离仍为必需。remove.bg 密钥属于用户应用设置，不放入 CI，其真实 API 验收暂缓。
 
-在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.0`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
+在 GitHub Actions 手动运行 `Release commerce desktop`，选择待验收源码分支，版本填写与 `package.json` 相同的值（当前 `0.2.1`），签名模式选择默认的 `unsigned`。此路径运行完整测试、打包和独立插件签名，只上传 `Commerce-macOS` / `Commerce-Windows` 验收制品，供下载并手动安装检查，不创建标签或公开 Release。手动任务仅具有仓库读取权限。
+
+v0.2.1 起，打包验收先将完整应用复制到源码目录外，使用独立工作目录并清除 `NODE_PATH` / `NODE_OPTIONS` 后启动。不得让源码仓库中的依赖参与验收。Harness 启动接口的必需 peer dependencies 明确列入桌面生产依赖；缺失依赖必须导致这项验收失败。
 
 `release-commerce.yml` 拒绝缺失或不匹配的插件密钥、验收版本与发布标签不一致的构建。完成最低支持系统验收后，推送匹配版本的 `v<version>` 标签，再重新构建并发布 GitHub Release；只有标签触发的发布任务具有仓库写入权限。标签发布读取 Repository variable `COMMERCE_DESKTOP_SIGNING`，未设置时默认 `unsigned`。更新说明取 `docs/releases/v<version>.md`。
 

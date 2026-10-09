@@ -1,19 +1,31 @@
 import { _electron, expect } from '@playwright/test';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { desktopSigningMode } from '../desktop/distribution.mjs';
 
-const executablePath = path.resolve(process.argv[2] || (process.platform === 'darwin'
+const sourceExecutable = path.resolve(process.argv[2] || (process.platform === 'darwin'
   ? 'release/desktop/mac-arm64/Commerce Tools.app/Contents/MacOS/Commerce Tools'
   : 'release/desktop/win-unpacked/Commerce Tools.exe'));
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'commerce-packaged-'));
 let app;
 try {
-  app = await _electron.launch({ executablePath, args: ['--user-data-dir=' + path.join(temporary, 'data')], timeout: 30000 });
+  // Installed applications cannot borrow peer dependencies from a developer
+  // checkout. Copy the whole distribution and launch it outside the repository.
+  const sourceRoot = process.platform === 'darwin' ? path.resolve(sourceExecutable, '../../..') : path.dirname(sourceExecutable);
+  const installedRoot = path.join(temporary, path.basename(sourceRoot));
+  await cp(sourceRoot, installedRoot, { recursive: true, verbatimSymlinks: true });
+  const executablePath = path.join(installedRoot, path.relative(sourceRoot, sourceExecutable));
+  const env = { ...process.env }; delete env.NODE_PATH; delete env.NODE_OPTIONS;
+  app = await _electron.launch({ executablePath, cwd: temporary, env, args: ['--user-data-dir=' + path.join(temporary, 'data')], timeout: 30000 });
   app.process().stderr.on('data', bytes => process.stderr.write(bytes));
   const page = await app.firstWindow();
-  await expect(page.getByText('Harness 内核已连接')).toBeVisible({ timeout: 30000 });
+  await expect.poll(async () => {
+    const current = await page.evaluate(() => window.commerceDesktop.invoke('status'));
+    if (current.kernel.error) throw new Error(current.kernel.error);
+    return current.kernel.systems.length;
+  }, { timeout: 30000 }).toBe(7);
+  await expect(page.getByText('Harness 内核已连接')).toBeVisible();
   const status = await page.evaluate(() => window.commerceDesktop.invoke('status'));
   expect(status.update.delivery).toBe(desktopSigningMode() === 'signed' ? 'automatic' : 'manual');
   if (status.update.delivery === 'manual') {
@@ -32,7 +44,7 @@ try {
   await app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }); }, output);
   await label.getByRole('button', { name: '导出 PDF', exact: true }).click();
   await expect.poll(async () => { try { return (await readFile(output)).subarray(0, 4).toString(); } catch { return ''; } }).toBe('%PDF');
-  console.log('Packaged application: own UI, Harness kernel, sandboxed offline OCR and saved PDF passed.');
+  console.log('Standalone installed application outside the checkout: own UI, Harness kernel, sandboxed offline OCR and saved PDF passed.');
 } finally {
   if (app) await app.close();
   await rm(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
