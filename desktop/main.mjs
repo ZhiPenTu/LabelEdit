@@ -76,13 +76,17 @@ async function openView(id, settings = false) {
     view.webContents.on('did-fail-load', (_event, code, description) => console.error('Plugin view failed:', id, code, description));
     view.webContents.on('did-stop-loading', () => console.log('Plugin loading stopped:', id, view.webContents.getURL()));
     view.webContents.on('render-process-gone', (_event, details) => console.error('Plugin renderer gone:', id, details));
+    // Create the native view with a real viewport before navigation. Inactive
+    // tools stay hidden until the shell supplies their final surface bounds.
+    const {width,height} = window.getContentBounds();
+    view.setBounds({x:0,y:0,width,height}); view.setVisible(false);
     window.contentView.addChildView(view); views.set(id, view); owners.set(view.webContents.id, id);
     try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
     catch (e) { await closeView(id); throw e; }
   }
   const destination = 'commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui);
   if (views.get(id).webContents.getURL() !== destination) await views.get(id).webContents.loadURL(destination);
-  hideViews(); visible = id; views.get(id).setVisible(true); return sanitizePlugin(plugin);
+  hideViews(); visible = id; return sanitizePlugin(plugin);
 }
 function kernelRequest(message) {
   if (!host || systems.length !== 7) return Promise.reject(new Error('Harness 内核不可用，请重新启动。'));
@@ -153,7 +157,7 @@ ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
   if (method === 'view.open') return openView(args.id, args.settings);
   if (method === 'view.hide') { hideViews(); return; }
   if (method === 'view.close') { await closeView(args.id); changed(); return; }
-  if (method === 'view.bounds') { const view = views.get(visible); if (view) { const {width,height} = window.getContentBounds(); if (['x','y','width','height'].every(k => Number.isFinite(args[k]) && args[k] >= 0) && args.x+args.width <= width+2 && args.y+args.height <= height+2) view.setBounds(Object.fromEntries(['x','y','width','height'].map(k => [k,Math.floor(args[k])]))); } return; }
+  if (method === 'view.bounds') { const view = views.get(visible); if (view) { const {width,height} = window.getContentBounds(); if (['x','y','width','height'].every(k => Number.isFinite(args[k]) && args[k] >= 0) && args.x+args.width <= width+2 && args.y+args.height <= height+2) { view.setBounds(Object.fromEntries(['x','y','width','height'].map(k => [k,Math.floor(args[k])]))); view.setVisible(true); } } return; }
   const service = method.split('.')[0];
   if (!['plugins','market','updates'].includes(service)) throw new Error('平台操作不受支持。');
   const result = await kernelRequest({type:'call',kind:'system',service,method,args});
