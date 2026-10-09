@@ -60,8 +60,12 @@ pub fn launch(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     let mut startup: STARTUPINFOEXW = zeroed(); startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES; startup.StartupInfo.hStdInput = handles[0]; startup.StartupInfo.hStdOutput = handles[1]; startup.StartupInfo.hStdError = handles[2]; startup.lpAttributeList = list;
     let mut command = wide(&std::iter::once(p.executable.as_str()).chain(p.args.iter().map(String::as_str)).map(quote_arg).collect::<Vec<_>>().join(" "));
-    let executable = wide(&p.executable); let cwd = wide(&p.cwd); let mut process: PROCESS_INFORMATION = zeroed();
-    checked(CreateProcessW(executable.as_ptr(), command.as_mut_ptr(), null(), null(), 1, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_NO_WINDOW, null(), cwd.as_ptr(), &startup.StartupInfo, &mut process))?;
+    let executable = wide(&p.executable); let cwd = wide(&p.cwd);
+    let mut environment: Vec<u16> = Vec::new();
+    let mut values: std::collections::BTreeMap<String,String> = std::env::vars().filter(|(key,_)| !["USERPROFILE","LOCALAPPDATA","APPDATA"].contains(&key.to_uppercase().as_str())).collect();
+    for key in ["USERPROFILE","LOCALAPPDATA","APPDATA"] { values.insert(key.to_string(),p.cwd.clone()); }
+    for (key,value) in values { environment.extend(format!("{key}={value}").encode_utf16()); environment.push(0); } environment.push(0); let mut process: PROCESS_INFORMATION = zeroed();
+    checked(CreateProcessW(executable.as_ptr(), command.as_mut_ptr(), null(), null(), 1, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment.as_ptr() as *const c_void, cwd.as_ptr(), &startup.StartupInfo, &mut process)).map_err(|error| format!("CreateProcess AppContainer: {error}"))?;
     let child = Handle(process.hProcess); let thread = Handle(process.hThread);
     if let Err(error) = checked(AssignProcessToJobObject(job.0, child.0)) { TerminateProcess(child.0, 126); return Err(error); }
     if ResumeThread(thread.0) == u32::MAX { TerminateProcess(child.0, 126); return Err(std::io::Error::last_os_error().into()); }

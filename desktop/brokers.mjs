@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, copyFile, realpath, lstat, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {secureRequest} from './network-transport.mjs';
 import { allowedNetwork } from './security.mjs';
 export class FileBroker {
   constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); }
@@ -36,9 +37,10 @@ export class FileBroker {
   async revoke(id) { const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
 }
 export class NetworkBroker {
-  constructor(files, credentials, request = (...args) => fetch(...args)) { this.files = files; this.credentials = credentials; this.request = request; this.tasks = new Map(); }
+  constructor(files, credentials, request = secureRequest) { this.files = files; this.credentials = credentials; this.request = request; this.tasks = new Map(); }
   async call(plugin, options) {
     const url = allowedNetwork(plugin, options.url);
+    if (url.href !== 'https://api.remove.bg/v1.0/removebg') return this.generic(plugin, options, url);
     // v1's online capability is deliberately bounded to the documented upload API.
     if (url.href !== 'https://api.remove.bg/v1.0/removebg' || !(plugin.permissions.credentials ?? []).includes(options.credential)) throw new Error('服务或凭据未授权。');
     const item = await this.files.get(plugin, options.fileToken);
@@ -62,6 +64,23 @@ export class NetworkBroker {
       return await this.files.create(plugin, bytes, path.parse(item.name).name + '-透明背景.png', 'image/png');
     } catch (e) { if (controller.signal.aborted) throw new Error('抠图任务已取消或超时；请检查额度后再重试。'); throw e; }
     finally { clearTimeout(timer); this.tasks.delete(key); }
+  }
+  async generic(plugin,options,url) {
+    const method=options.method || 'GET';if(!['GET','POST','PUT','PATCH','DELETE'].includes(method))throw new Error('请求方法不受支持。');
+    const headers={Accept:'application/json'};let body;
+    if(options.json!==undefined) {body=JSON.stringify(options.json);if(body.length>4*1024*1024||method==='GET')throw new Error('请求内容无效或过大。');headers['Content-Type']='application/json';}
+    if(options.credential) {
+      if(!(plugin.permissions.credentials ?? []).includes(options.credential))throw new Error('凭据未授权。');
+      const secret=await this.credentials.get(plugin.id,options.credential);if(!secret)throw new Error('请先配置服务凭据。');
+      if(options.credentialHeader==='X-Api-Key')headers['X-Api-Key']=secret;else headers.Authorization='Bearer '+secret;
+    }
+    const key=plugin.id+':'+(options.taskId||randomUUID());if(this.tasks.has(key))throw new Error('任务已在运行。');
+    const controller=new AbortController();this.tasks.set(key,controller);const timer=setTimeout(()=>controller.abort(),120000);
+    try {
+      controller.signal.throwIfAborted();const response=await this.request(url.href,{method,headers,body,redirect:'error',signal:controller.signal});
+      const chunks=[];let size=0;if(response.body)for await(const chunk of response.body){size+=chunk.length;if(size>8*1024*1024){controller.abort();throw new Error('服务响应过大。');}chunks.push(chunk);}
+      controller.signal.throwIfAborted();return {status:response.status,mime:response.headers.get('content-type')||'application/octet-stream',data:Buffer.concat(chunks).toString('base64')};
+    }catch(error){if(controller.signal.aborted)throw new Error('网络任务已取消或超时。');throw new Error('网络请求未完成：'+error.message);}finally{clearTimeout(timer);this.tasks.delete(key);}
   }
   cancel(id, task) { this.tasks.get(id + ':' + task)?.abort(); }
   stop(id) { for (const [key, controller] of this.tasks) if (key.startsWith(id + ':')) controller.abort(); }

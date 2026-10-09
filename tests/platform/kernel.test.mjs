@@ -15,7 +15,7 @@ test('real Harness profile loads only our seven protected system services and di
     await k.reconcile([{ id: 'local.fixture', enabled: true, services: { provides: ['local.echo'] } }]);
     assert.ok(k.tools.has('local.echo'));
     assert.deepEqual(await k.call('tool', 'local.echo', 'echo', { text: 'hello' }, 'local.fixture'), ['test']);
-    assert.equal(calls.at(-1)[0], 'tool');
+    assert.equal(calls.at(-1)[0], 'sandbox');
     await k.reconcile([]); assert.equal(k.tools.size, 0);
     await assert.rejects(k.call('tool', 'local.echo', 'echo', {}, 'local.fixture'));
     await k.dispose(); assert.equal(k.systems.size, 0);

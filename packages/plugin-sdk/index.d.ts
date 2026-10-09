@@ -12,7 +12,7 @@ export function createPluginClient(bridge?: PluginBridge): {
   invoke<T = unknown>(method: string, args?: unknown): Promise<T>;
   files: { pick(options?: { extensions?: string[] }): Promise<FileToken | null>; read(token: string): Promise<{ data: string; mime: string }>; save(token: string, filename: string): Promise<boolean> };
   credentials: { set(name: string, value: string): Promise<void>; status(name: string): Promise<boolean>; clear(name: string): Promise<void> };
-  network: { request(options: { url: string; fileToken: string; credential: string; fields?: Record<string, string>; taskId?: string }): Promise<FileToken> };
+  network: { request(options: { url: 'https://api.remove.bg/v1.0/removebg'; fileToken: string; credential: string; taskId?: string }): Promise<FileToken>; request(options: { url: string; method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; json?: unknown; credential?: string; credentialHeader?: 'Authorization' | 'X-Api-Key'; taskId?: string }): Promise<{ status: number; mime: string; data: string }> };
   services: { call<T = unknown>(service: string, method: string, args?: unknown): Promise<T> };
   tasks: { cancel(id: string): Promise<void> };
   registerTool(value: { title: string }): Promise<void>; registerSettings(value: { title: string }): Promise<void>;

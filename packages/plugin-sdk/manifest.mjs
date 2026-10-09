@@ -11,9 +11,9 @@ export function safeRelative(value) {
 }
 export function validateManifest(pkg, target = TARGET) {
   const m = pkg?.commerce;
-  if (!m || m.manifestVersion !== 1 || !/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/.test(m.id) || m.id.startsWith('system.')) throw new Error('插件标识或清单格式无效。');
+  if (!m || m.manifestVersion !== 1 || !/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/.test(m.id) || m.id.startsWith('system.') || m.id.length > 96) throw new Error('插件标识或清单格式无效。');
   if (!semver.valid(pkg.version) || !semver.satisfies(API_VERSION, m.api || '')) throw new Error('插件 API 版本不兼容。');
-  if (typeof m.title !== 'string' || !m.title.trim() || m.title.length > 80 || typeof m.description !== 'string') throw new Error('插件名称与说明无效。');
+  if (typeof m.title !== 'string' || !m.title.trim() || m.title.length > 80 || typeof m.description !== 'string' || m.description.length > 2000) throw new Error('插件名称与说明无效。');
   safeRelative(m.ui);
   if (m.settings) { if (typeof m.settings.title !== 'string') throw new Error('插件设置无效。'); safeRelative(m.settings.entry); }
   const permissions = m.permissions ?? {};

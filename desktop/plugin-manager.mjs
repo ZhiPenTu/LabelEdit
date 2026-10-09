@@ -10,8 +10,14 @@ export function verifyArtifact(bytes, record, publicKey) {
   if (createHash('sha256').update(bytes).digest('hex') !== record.sha256) throw new Error('插件包校验失败。');
   if (!verify(null, bytes, publicKey, Buffer.from(record.signature, 'base64'))) throw new Error('插件签名无效。');
 }
+export function inspectPackage(bytes) {
+  if(bytes.length>MAX_PACKAGE_BYTES)throw new Error('插件包过大。');
+  const entry=new AdmZip(bytes).getEntry('package.json');if(!entry || entry.header.size>65536)throw new Error('插件清单缺失或过大。');
+  return validateManifest(JSON.parse(entry.getData().toString('utf8')));
+}
 export async function unpackPackage(bytes, destination) {
   if (bytes.length > MAX_PACKAGE_BYTES) throw new Error('插件包过大。');
+  inspectPackage(bytes);
   const zip = new AdmZip(bytes), entries = zip.getEntries(), seen = new Set();
   if (entries.length > 20000) throw new Error('插件包文件过多。');
   let total = 0;

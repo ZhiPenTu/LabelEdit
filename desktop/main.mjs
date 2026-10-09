@@ -1,8 +1,9 @@
 import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess, net } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import { readFile, mkdir } from 'node:fs/promises';
-import { PluginManager, boundedDownload } from './plugin-manager.mjs';
+import { PluginManager, boundedDownload, inspectPackage } from './plugin-manager.mjs';
 import { confinedPath } from './security.mjs';
 import { Workers } from './workers.mjs';
 import { FileBroker, NetworkBroker } from './brokers.mjs';
@@ -99,7 +100,7 @@ async function catalog() {
 }
 async function systemInvoke(service, method, args = {}) {
   if (service === 'home' && method === 'list') return (await manager.list()).map(sanitizePlugin);
-  if (service === 'tool' && method === 'call') {
+  if (service === 'sandbox' && method === 'call') {
     const caller = await manager.get(args.caller), provider = await manager.get(args.provider);
     if (!caller.enabled || caller.missing.length || !provider.enabled || provider.missing.length || !(provider.services?.provides ?? []).includes(args.service) || ![...(caller.services?.provides ?? []), ...(caller.services?.requires ?? [])].includes(args.service)) throw new Error('服务调用未授权。');
     return (await workers.start(provider, caller.id)).call(args.method, args.args);
@@ -114,8 +115,9 @@ async function systemInvoke(service, method, args = {}) {
 async function performPlatform(method, args) {
   if (method === 'plugins.import') {
     const result = await dialog.showOpenDialog(window, { title: '导入插件', properties: ['openFile'], filters: [{ name: '电商工具插件', extensions: ['ecplugin', 'zip'] }] }); if (result.canceled) return;
-    const confirm = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '安装'], defaultId: 0, title: '安装本地插件', message: '此插件的作者尚未经过市场签名验证。', detail: '插件将在隔离环境中运行，安装后可在插件管理中停用或卸载。' }); if (confirm.response !== 1) return;
-    await manager.install(await readFile(result.filePaths[0])); changed(); return;
+    const bytes = await readFile(result.filePaths[0]); const manifest=inspectPackage(bytes);
+    const confirm = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '安装'], defaultId: 0, title: '安装本地插件', message: '此插件的作者尚未经过市场签名验证。', detail: manifest.title + ' (' + manifest.id + ') v' + manifest.version + '\n文件选择与保存：' + (manifest.permissions.files ? '申请' : '未申请') + '\n网络来源：' + (manifest.permissions.network ?? []).join('、') + '\n凭据名称：' + (manifest.permissions.credentials ?? []).join('、') + '\n插件将在隔离环境中运行，可随时停用或卸载。' }); if (confirm.response !== 1) return;
+    await manager.install(bytes); changed(); return;
   }
   if (method === 'plugins.enable') { await manager.setEnabled(args.id, args.enabled); changed(); return; }
   if (method === 'plugins.uninstall') { await manager.uninstall(args.id); changed(); return; }
@@ -129,7 +131,7 @@ async function performPlatform(method, args) {
 }
 ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
   assertFrame(event, true); validateCall(method, args);
-  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: (await manager.list()).map(sanitizePlugin), update, tabs: [...views.keys()] };
+  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: systems.length === 7 ? await kernelRequest({type:'call',kind:'system',service:'home',method:'list',args:{}}) : (await manager.list()).map(sanitizePlugin), update, tabs: [...views.keys()] };
   if (method === 'kernel.retry') { await startKernel(); return true; }
   if (method === 'view.open') return openView(args.id, args.settings);
   if (method === 'view.hide') { hideViews(); return; }
@@ -163,7 +165,7 @@ ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {
 async function main() {
 await app.whenReady();
 await mkdir(app.getPath('userData'), { recursive: true });
-credentials = new Credentials(launcher); files = new FileBroker(path.join(app.getPath('userData'), 'files'), dialog); network = new NetworkBroker(files, credentials);
+credentials = new Credentials(launcher, 'profile.' + createHash('sha256').update(app.getPath('userData')).digest('hex').slice(0,16) + ':'); files = new FileBroker(path.join(app.getPath('userData'), 'files'), dialog); network = new NetworkBroker(files, credentials);
 workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
@@ -185,3 +187,6 @@ app.on('window-all-closed', () => app.quit());
 }
 if (!primary) app.quit();
 else void main().catch(error => { console.error(error); app.quit(); });
+
+// Trusted main-process integration access; never exposed over renderer IPC.
+export { network, workers, manager };

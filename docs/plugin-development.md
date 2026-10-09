@@ -17,7 +17,7 @@ npm run plugin -- pack my-tool my-tool.ecplugin
 
 `package.json.commerce` 声明 `manifestVersion: 1`、全局唯一 `id`、`title`、`description`、`api: ^1.0.0`、相对 `ui`、可选 `settings`、`permissions`、`services.provides/requires` 与 `backend`。本地程序以 `backend.entry.darwin-arm64` / `win32-x64` 声明入口。禁止绝对路径、符号链接、目录穿越、系统插件 ID、安装脚本执行和同名服务覆盖。
 
-SDK 提供文件选择/读取/保存、凭据设置/状态/清除、受控网络请求、服务调用、工具/设置贡献、取消和清理。凭据读取仅存在于可信代理，插件页面无法读取已保存密钥。界面通过 `createPluginClient()` 获得 API；类型见 `packages/plugin-sdk/index.d.ts`。首版在线上传适配器为 remove.bg；可声明的来源必须符合 HTTPS 权限规则。任务取消会停止调用方本地进程并终止在线请求；失败请求不会自动重发。
+SDK 提供文件选择/读取/保存、凭据设置/状态/清除、受控网络请求、服务调用、工具/设置贡献、取消和清理。凭据读取仅存在于可信代理，插件页面无法读取已保存密钥。界面通过 `createPluginClient()` 获得 API；类型见 `packages/plugin-sdk/index.d.ts`。普通网络请求支持 HTTPS 的 GET/POST/PUT/PATCH/DELETE、JSON 内容及按引用注入 Bearer/X-Api-Key，响应为状态、MIME 和 Base64 数据。remove.bg 另提供受控文件上传适配器，返回可保存文件令牌。代理锁定已解析的公网 IP，禁止私网、重定向及未声明来源。任务取消会停止调用方本地进程并终止在线请求；失败请求不会自动重发。
 
 本地程序只可读取插件制品和必要运行时，写入私有任务目录。文件选择器由宿主授权，文件字节由文件令牌或受控 RPC 传入。输出由选择器保存。直接联网、访问其他插件数据与系统凭据、启动其他程序均被系统沙箱阻止；沙箱不可用时拒绝运行。
 

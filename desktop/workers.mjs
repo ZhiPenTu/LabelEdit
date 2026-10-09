@@ -27,9 +27,9 @@ export class Workers {
   async launch(plugin) {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const cwd = await realpath(await mkdtemp(path.join(this.root, plugin.id + '-')));
-    const entry = await confinedPath(plugin.folder, plugin.backend.entry[TARGET]);
     let worker;
     try {
+      const entry = await confinedPath(plugin.folder, plugin.backend.entry[TARGET]);
       const node = plugin.backend.type === 'node'; const executable = node ? this.nodeRuntime : entry;
       const readOnly = [await realpath(plugin.folder)]; if (node) {
         const runtime = await realpath(this.nodeRuntime), dir = path.dirname(runtime);
@@ -38,14 +38,14 @@ export class Workers {
         else if (process.platform === 'win32') { for (const name of await readdir(dir)) if (/\.(dll|pak|dat|bin)$/i.test(name)) readOnly.push(path.join(dir, name)); }
       }
       const child = await launchSandbox({ executable, args: node ? [entry] : [], readOnly, writable: [cwd], cwd, launcher: this.launcher, env: node ? { ELECTRON_RUN_AS_NODE: '1' } : {} });
-      worker = new RpcWorker(child); worker.directory = cwd; child.once('close', () => void child.cleanup.then(() => rm(cwd, { recursive: true, force: true })));
+      worker = new RpcWorker(child); worker.directory = cwd; worker.cleaned = child.cleanup.then(() => rm(cwd, { recursive: true, force: true, maxRetries:5, retryDelay:100 }));
       await worker.call('health'); return worker;
-    } catch (e) { await worker?.stop(); await rm(cwd, { recursive: true, force: true }); throw e; }
+    } catch (e) { if(worker) {await worker.stop();await worker.cleaned;} else await rm(cwd,{recursive:true,force:true,maxRetries:5,retryDelay:100}); throw e; }
   }
   async stop(id) {
     const entries = [...this.workers].filter(([key]) => key.split(':').includes(id));
     for (const [key] of entries) this.workers.delete(key);
-    await Promise.all(entries.map(async ([,pending]) => (await pending.catch(() => null))?.stop()));
+    await Promise.all(entries.map(async ([,pending]) => {const worker=await pending.catch(() => null);if(worker){await worker.stop();await worker.cleaned;}}));
   }
   async stopAll() { await Promise.all([...new Set([...this.workers.keys()].map(key => key.split(':')[0]))].map(id => this.stop(id))); }
 }

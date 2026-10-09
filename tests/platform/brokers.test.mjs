@@ -25,3 +25,7 @@ test('cancelled HTTP task is not automatically resubmitted', async () => {
   try { const task = broker.call(plugin, { url: 'https://api.remove.bg/v1.0/removebg', fileToken: file.token, credential: 'removebg', taskId: 'test' }); await new Promise(r => setTimeout(r, 50)); assert.equal(calls, 1); broker.cancel(plugin.id, 'test'); await assert.rejects(task, /取消/); assert.equal(calls, 1); }
   finally { await rm(root, { recursive: true, force: true }); }
 });
+test('generic declared online services use scoped credentials and return bounded data',async()=>{
+ const p={...plugin,permissions:{...plugin.permissions,network:['https://tools.example.com']}},broker=new NetworkBroker(null,{get:async()=> 'fixture'},async(url,request)=>{assert.equal(url,'https://tools.example.com/task');assert.equal(request.headers.Authorization,'Bearer fixture');assert.equal(request.body,'{"input":1}');return new Response('{"output":2}');});
+ const result=await broker.call(p,{url:'https://tools.example.com/task',method:'POST',json:{input:1},credential:'removebg'});assert.equal(result.status,200);assert.equal(Buffer.from(result.data,'base64').toString(),'{"output":2}');await assert.rejects(broker.call(p,{url:'https://tools.example.com/task',credential:'unscoped'}));
+});

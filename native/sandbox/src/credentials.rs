@@ -6,7 +6,7 @@ pub struct Request { op: String, account: String, value: Option<String> }
 pub fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut input = String::new(); io::stdin().take(16384).read_to_string(&mut input)?;
     let request: Request = serde_json::from_str(&input)?;
-    if !["set", "get", "clear"].contains(&request.op.as_str()) || request.account.len() > 180 || !request.account.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".:-".contains(c)) { return Err("invalid credential request".into()); }
+    if !["set", "get", "clear"].contains(&request.op.as_str()) || request.account.len() > 256 || !request.account.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".:-".contains(c)) { return Err("invalid credential request".into()); }
     #[cfg(target_os = "macos")] let result = mac::execute(&request)?;
     #[cfg(windows)] let result = windows::execute(&request)?;
     #[cfg(not(any(target_os = "macos", windows)))] let result: Option<String> = return Err("credentials unavailable".into());
@@ -55,7 +55,7 @@ mod mac {
 mod windows {
     use super::Request;
     use windows_sys::Win32::{Foundation::*, Security::Credentials::*};
-    use std::{ptr::{null, null_mut}, mem::zeroed};
+    use std::{ptr::null_mut, mem::zeroed};
     pub fn execute(r: &Request) -> Result<Option<String>, Box<dyn std::error::Error>> { unsafe {
         let mut target: Vec<u16> = ("Commerce.Plugins/".to_string() + &r.account).encode_utf16().chain([0]).collect();
         if r.op == "get" { let mut credential = null_mut(); if CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut credential) == 0 { if GetLastError() == ERROR_NOT_FOUND { return Ok(None); } return Err(std::io::Error::last_os_error().into()); }

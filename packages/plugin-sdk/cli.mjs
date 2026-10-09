@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile, readdir, lstat } from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createHash, sign } from 'node:crypto';
@@ -38,4 +39,4 @@ export async function main(args) {
   else if (command === 'sign') { const key = process.env.COMMERCE_PLUGIN_SIGNING_KEY; if (!key) throw new Error('未配置 COMMERCE_PLUGIN_SIGNING_KEY。'); const bytes = await readFile(first); await writeFile(first + '.signature.json', JSON.stringify({ sha256: createHash('sha256').update(bytes).digest('hex'), signature: sign(null, bytes, key).toString('base64') })); }
   else throw new Error('用法：create <name> [--native] | validate <directory> | pack <directory> [output.ecplugin] | sign <artifact>');
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 1; });
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 1; });

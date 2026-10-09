@@ -23,7 +23,7 @@ export async function launchSandbox({ executable, args = [], readOnly = [], writ
   const filename = path.join(policyRoot, '.sandbox-' + randomUUID() + '.json');
   await writeFile(filename, JSON.stringify({ ...canonical, profile: process.platform === 'darwin' ? seatbeltProfile(canonical) : '' }), { mode: 0o600 });
   const cleanEnv = { LANG: 'en_US.UTF-8', TMPDIR: cwd, TEMP: cwd, TMP: cwd, ...env };
-  if (process.platform === 'win32') { cleanEnv.SystemRoot = process.env.SystemRoot; cleanEnv.WINDIR = process.env.WINDIR; }
+  if (process.platform === 'win32') { cleanEnv.SystemRoot = process.env.SystemRoot; cleanEnv.WINDIR = process.env.WINDIR; for(const name of ['USERPROFILE','LOCALAPPDATA','APPDATA']) if(process.env[name]) cleanEnv[name]=process.env[name]; }
   let child;
   try { child = spawn(launcher, [filename], { cwd, env: cleanEnv, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform === 'darwin' }); }
   catch { throw new Error('SANDBOX_UNAVAILABLE：无法启动原生沙箱。'); }

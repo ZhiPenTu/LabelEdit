@@ -21,11 +21,12 @@ export async function bootCommerceKernel({ home, installAnchor, invoke = async (
     for (const fiber of adapters.values()) await fiber.dispose();
     adapters.clear(); tools.clear();
     for (const plugin of plugins.filter(p => p.enabled && !p.missing?.length)) {
-      const fiber = runtime.ctx.plugin({ name: 'commerce-tool-' + plugin.id, apply(child) {
+      const fiber = runtime.ctx.plugin({ name: 'commerce-tool-' + plugin.id, inject: (plugin.services?.requires ?? []).map(service => 'commerce_tool:' + service), apply(child) {
         child.effect(() => {
           for (const service of plugin.services?.provides ?? []) {
             if (tools.has(service)) throw new Error('重复服务：' + service);
-            tools.set(service, { plugin: plugin.id, invoke: (method, args, caller) => invoke('tool', 'call', { provider: plugin.id, service, method, args, caller }) });
+            const entry = { plugin: plugin.id, invoke: (method, args, caller) => systems.get('sandbox').invoke('call', { provider: plugin.id, service, method, args, caller }) };
+            child.provide('commerce_tool:' + service, entry); tools.set(service,entry);
           }
           return () => { for (const service of plugin.services?.provides ?? []) tools.delete(service); };
         });
