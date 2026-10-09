@@ -35,7 +35,7 @@ def test_python_framework_aliases_become_independent_resources(tmp_path):
     assert (framework / 'Resources/Info.plist').read_text() == 'framework metadata'
     assert (framework / 'Versions/Current/Python').read_bytes() == b'fixture binary'
     assert (artifact / 'libpython.dylib').read_bytes() == b'fixture binary'
-    assert (artifact / 'libpython.dylib').stat().st_mode & 0o111
+    assert ((artifact / 'libpython.dylib').stat().st_mode & 0o777) == (binary.stat().st_mode & 0o777)
     (resources / 'Info.plist').write_text('changed original')
     assert (framework / 'Resources/Info.plist').read_text() == 'framework metadata'
 
