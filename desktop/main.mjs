@@ -72,6 +72,7 @@ function openView(id, settings = false) {
 }
 function assertViewEpoch(id,epoch) {if(quitting || (viewEpochs.get(id) ?? 0)!==epoch)throw new Error('工具打开已取消。');}
 async function loadView(id, settings, epoch) {
+  while (toolSyncPromise) await toolSyncPromise;
   const plugin = await manager.get(id); if (!plugin.enabled || plugin.missing.length) throw new Error('插件已停用或缺少依赖。');
   assertViewEpoch(id,epoch);
   if (!views.has(id)) {
@@ -119,7 +120,16 @@ function kernelRequest(message) {
   if (!host || systems.length !== 7) return Promise.reject(new Error('Harness 内核不可用，请重新启动。'));
   return new Promise((resolve,reject) => { const id = ++kernelCounter; const timer = setTimeout(() => { kernelRequests.delete(id); reject(new Error('内核请求超时。')); }, 30000); kernelRequests.set(id,{resolve,reject,timer}); host.postMessage({...message,id}); });
 }
-async function syncTools() { for(const p of await manager.list()) if (!p.enabled || p.missing.length) await closeView(p.id); return kernelRequest({type:'sync', plugins: (await manager.list()).map(({id,enabled,missing,services}) => ({id,enabled,missing,services}))}); }
+let toolSyncPromise = null;
+async function syncTools() {
+  const current = (async () => {
+    for (const p of await manager.list()) if (!p.enabled || p.missing.length) await closeView(p.id);
+    return kernelRequest({ type: 'sync', plugins: (await manager.list()).map(({ id, enabled, missing, services }) => ({ id, enabled, missing, services })) });
+  })();
+  toolSyncPromise = current;
+  try { return await current; }
+  finally { if (toolSyncPromise === current) toolSyncPromise = null; }
+}
 async function startKernel() {
   kernelError = null; systems = []; const previousHost = host; host = null; previousHost?.kill();
   for (const p of kernelRequests.values()) { clearTimeout(p.timer); p.reject(new Error('内核已重新启动。')); } kernelRequests.clear();
@@ -165,13 +175,13 @@ async function performPlatform(method, args) {
     const result = await dialog.showOpenDialog(window, { title: '导入插件', properties: ['openFile'], filters: [{ name: '电商工具插件', extensions: ['ecplugin', 'zip'] }] }); if (result.canceled) return;
     const bytes = await readFile(result.filePaths[0]); const manifest=inspectPackage(bytes);
     const confirm = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '安装'], defaultId: 0, title: '安装本地插件', message: '此插件的作者尚未经过市场签名验证。', detail: manifest.title + ' (' + manifest.id + ') v' + manifest.version + '\n文件选择与保存：' + (manifest.permissions.files ? '申请' : '未申请') + '\n网络来源：' + (manifest.permissions.network ?? []).join('、') + '\n凭据名称：' + (manifest.permissions.credentials ?? []).join('、') + '\n插件将在隔离环境中运行，可随时停用或卸载。' }); if (confirm.response !== 1) return;
-    await manager.install(bytes); changed(); return;
+    await manager.install(bytes); return;
   }
-  if (method === 'plugins.enable') { await manager.setEnabled(args.id, args.enabled); changed(); return; }
-  if (method === 'plugins.uninstall') { await manager.uninstall(args.id); changed(); return; }
-  if (method === 'plugins.rollback') { await manager.rollback(args.id); changed(); return; }
+  if (method === 'plugins.enable') { await manager.setEnabled(args.id, args.enabled); return; }
+  if (method === 'plugins.uninstall') { await manager.uninstall(args.id); return; }
+  if (method === 'plugins.rollback') { await manager.rollback(args.id); return; }
   if (method === 'market.list') return catalog();
-  if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); changed(); return; }
+  if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); return; }
   if (method === 'updates.check' || method === 'updates.download') {
     if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。');
     if (method === 'updates.check') updateService.check();
@@ -191,7 +201,10 @@ ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
   const service = method.split('.')[0];
   if (!['plugins','market','updates'].includes(service)) throw new Error('平台操作不受支持。');
   const result = await kernelRequest({type:'call',kind:'system',service,method,args});
-  if (service === 'plugins' || method === 'market.install') await syncTools();
+  if (service === 'plugins' || method === 'market.install') {
+    await syncTools();
+    changed();
+  }
   return result;
 });
 ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {

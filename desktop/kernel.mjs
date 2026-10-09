@@ -21,7 +21,7 @@ export async function bootCommerceKernel({ home, installAnchor, invoke = async (
     for (const fiber of adapters.values()) await fiber.dispose();
     adapters.clear(); tools.clear();
     for (const plugin of plugins.filter(p => p.enabled && !p.missing?.length)) {
-      const fiber = runtime.ctx.plugin({ name: 'commerce-tool-' + plugin.id, inject: (plugin.services?.requires ?? []).map(service => 'commerce_tool:' + service), apply(child) {
+      const fiber = await runtime.ctx.plugin({ name: 'commerce-tool-' + plugin.id, inject: (plugin.services?.requires ?? []).map(service => 'commerce_tool:' + service), apply(child) {
         child.effect(() => {
           for (const service of plugin.services?.provides ?? []) {
             if (tools.has(service)) throw new Error('重复服务：' + service);
