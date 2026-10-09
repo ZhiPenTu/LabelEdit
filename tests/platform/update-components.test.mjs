@@ -24,6 +24,7 @@ async function fixture(t) {
     'Contents/Resources/app.asar': 'updated UI',
     'Contents/Resources/app.asar.unpacked/node_modules/native/data': Buffer.alloc(40000, 9),
     'Contents/Resources/commerce/plugins/official.labeledit/backend/runtime': Buffer.alloc(40000, 6),
+    'Contents/Resources/commerce/plugins/official.labeledit/backend/label-edit-backend/label-edit-backend': 'frozen backend code',
     'Contents/Resources/commerce/plugins/official.labeledit/backend/_internal/.models/model.onnx': Buffer.alloc(30000, 7),
     'Contents/Resources/commerce/plugins/official.labeledit/ui/index.html': 'plugin UI',
   };
@@ -76,6 +77,14 @@ test('changed, missing and corrupted installed components are fetched, and valid
   f.requests.length = 0; await f.prepare(); assert.equal(f.requests.length, 0);
   const core = f.manifest.components.find(c => c.id === 'core'); await writeFile(cachedFile(f.cache, core.artifact), 'corrupt');
   await f.prepare(); assert.equal(f.requests.length, 1); assert.ok(f.requests[0].name.endsWith('.core.zip'));
+});
+
+test('changing the frozen plugin entry downloads plugin code while reusing Python libraries and models', mac, async t => {
+  const f = await fixture(t);
+  await cp(path.join(f.target, 'Contents/Resources/app.asar'), path.join(f.installed, 'Contents/Resources/app.asar'));
+  await writeFile(path.join(f.installed, 'Contents/Resources/commerce/plugins/official.labeledit/backend/label-edit-backend/label-edit-backend'), 'previous code');
+  const bundle = await f.prepare(); await verifyMacBundle(bundle, '0.2.4');
+  assert.deepEqual(f.requests.map(r => r.name), [componentManifestName('0.2.4'), 'CommerceTools-0.2.4-mac-arm64.plugin-code.zip']);
 });
 
 test('component download cancellation resumes the exact partial archive without changing the installed app', mac, async t => {

@@ -31,7 +31,7 @@
 
 ## 差量与组件更新开发验收
 
-`codex/differential-component-updates` 已实现 macOS ZIP blockmap 差量、校验缓存复用、HTTP Range 断点续传与安全完整下载回退；Windows 保留 electron-updater/NSIS 差量通道。第二阶段将完整 Mac 应用分为应用代码、独立 Electron framework、依赖、OCR 运行时、模型和插件界面，签名清单按文件哈希选择需要下载的组，重建完整应用并沿用原安装/重启/恢复助手。Release 工作流已加入独立组件制品生成、签名与重建应用的离线运行检查。
+`codex/differential-component-updates` 已实现 macOS ZIP blockmap 差量、校验缓存复用、HTTP Range 断点续传与安全完整下载回退；Windows 保留 electron-updater/NSIS 差量通道。第二阶段将完整 Mac 应用分为应用代码、独立 Electron framework、依赖、OCR 运行时、模型和插件代码（界面与冻结程序入口），签名清单按文件哈希选择需要下载的组，重建完整应用并沿用原安装/重启/恢复助手。Release 工作流已加入独立组件制品生成、签名与重建应用的离线运行检查。
 
 本机通过真实 HTTP 测试验证完整/差量/组件续传、缓存损坏、不可用 Range、差量重建哈希失败的回退、组件缺失/损坏、签名与产品/平台/版本约束、目录越界与链接、单文件哈希拒绝。完整应用重新打包后复制到源码目录外，真实 Harness、沙箱离线 OCR 与 PDF 保存通过；真实 Electron 更新界面验证差量进度、复用大小、页面切换和失败重试。
 

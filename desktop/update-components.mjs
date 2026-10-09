@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 import { downloadArtifact, fileDigest, matchesArtifact, cachedFile, pruneCache, validateArtifact } from './update-download.mjs';
 
 const DOMAIN = Buffer.from('Qingzuo desktop component update v1\0');
-const IDS = new Set(['core', 'electron', 'dependencies', 'ocr-runtime', 'ocr-models', 'plugin-ui']);
+const IDS = new Set(['core', 'electron', 'dependencies', 'ocr-runtime', 'ocr-models', 'plugin-code']);
 const MAX_MANIFEST = 16 * 1024 ** 2;
 const MAX_EXPANDED = 4 * 1024 ** 3;
 const hashPattern = /^[a-f0-9]{64}$/;
@@ -17,8 +17,9 @@ export function componentID(filename) {
   if (filename.startsWith('Contents/Frameworks/Electron Framework.framework/')) return 'electron';
   if (filename.startsWith('Contents/Resources/app.asar.unpacked/')) return 'dependencies';
   const plugin = 'Contents/Resources/commerce/plugins/official.labeledit/';
+  if (filename === plugin + 'backend/label-edit-backend/label-edit-backend') return 'plugin-code';
   if (filename.startsWith(plugin + 'backend/')) return filename.includes('/.models/') ? 'ocr-models' : 'ocr-runtime';
-  if (filename.startsWith(plugin)) return 'plugin-ui';
+  if (filename.startsWith(plugin)) return 'plugin-code';
   return 'core';
 }
 
