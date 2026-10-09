@@ -2,7 +2,7 @@
 
 轻巧的日常工具工作台，基于 Electron + DeepSeek Harness。用户通过工具中心发现、安装、配置、使用和更新插件。LabelEdit 默认附带，支持离线 PDF/OCR 编辑；AI 抠图独立安装，使用用户自己的 remove.bg API 密钥。
 
-[v0.2.3 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.3)。新增应用内下载进度、完整性校验及自动安装重启，保留轻作工具中心、插件市场和 LabelEdit 编辑器。当前通过 GitHub 分发未签名安装包；Apple/Windows 发布者签名为后续可选能力。v0.2.0–v0.2.2 用户需先安装一次 v0.2.3，之后可使用应用内更新。
+[v0.2.4 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.4)。新增差量下载、断点续传和 macOS 签名组件复用，保留应用内进度、完整性校验及自动安装重启，以及轻作工具中心、插件市场和 LabelEdit 编辑器。v0.2.3 用户可在应用内升级，本次仍需下载完整包；新的差量和组件能力从 v0.2.4 客户端开始用于后续更新。v0.2.0–v0.2.2 用户需先手动安装本版。当前通过 GitHub 分发未签名安装包；Apple/Windows 发布者签名为后续可选能力。
 
 支持 macOS 14+ Apple Silicon 和 Windows 10+ x64。
 
