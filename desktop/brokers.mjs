@@ -62,7 +62,7 @@ export class NetworkBroker {
       if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('服务没有返回有效的 PNG 图片。');
       controller.signal.throwIfAborted();
       return await this.files.create(plugin, bytes, path.parse(item.name).name + '-透明背景.png', 'image/png');
-    } catch (e) { if (controller.signal.aborted) throw new Error('抠图任务已取消或超时；请检查额度后再重试。'); throw e; }
+    } catch (e) { if (controller.signal.aborted) throw new Error('抠图任务已取消或超时；请检查额度后再重试。'); const safe = ['API 密钥无效或未授权。','remove.bg 调用额度不足。','服务请求过于频繁，请稍后手动重试。','服务没有返回有效的 PNG 图片。','服务返回的图片过大。','插件网络代理禁止访问本机和私有网络。','服务重定向被拒绝。']; throw new Error(safe.includes(e.message) || /^抠图服务未完成处理（\d+）。$/.test(e.message) ? e.message : '网络连接失败，请检查连接后手动重试。'); }
     finally { clearTimeout(timer); this.tasks.delete(key); }
   }
   async generic(plugin,options,url) {
@@ -80,7 +80,7 @@ export class NetworkBroker {
       controller.signal.throwIfAborted();const response=await this.request(url.href,{method,headers,body,redirect:'error',signal:controller.signal});
       const chunks=[];let size=0;if(response.body)for await(const chunk of response.body){size+=chunk.length;if(size>8*1024*1024){controller.abort();throw new Error('服务响应过大。');}chunks.push(chunk);}
       controller.signal.throwIfAborted();return {status:response.status,mime:response.headers.get('content-type')||'application/octet-stream',data:Buffer.concat(chunks).toString('base64')};
-    }catch(error){if(controller.signal.aborted)throw new Error('网络任务已取消或超时。');throw new Error('网络请求未完成：'+error.message);}finally{clearTimeout(timer);this.tasks.delete(key);}
+    }catch(error){if(controller.signal.aborted)throw new Error('网络任务已取消或超时。');throw new Error('网络请求未完成，请检查连接或服务配置。');}finally{clearTimeout(timer);this.tasks.delete(key);}
   }
   cancel(id, task) { this.tasks.get(id + ':' + task)?.abort(); }
   stop(id) { for (const [key, controller] of this.tasks) if (key.startsWith(id + ':')) controller.abort(); }

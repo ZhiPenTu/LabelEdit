@@ -12,9 +12,7 @@
     "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "tauri": "tauri",
-    "tauri:dev": "bash scripts/tauri-dev.sh",
-    "build:backend": "bash scripts/build-backend.sh",
+    "build:backend": "python scripts/build_backend.py",
     "build:desktop": "npm run build && node scripts/prepare-platform.mjs && electron-builder --config electron-builder.yml",
     "desktop:dev": "node scripts/electron-dev.mjs",
     "desktop:start": "electron .",
@@ -25,8 +23,7 @@
     "test:sandbox": "node --test tests/platform/sandbox.test.mjs",
     "test:kernel": "node --test tests/platform/kernel.test.mjs",
     "build:sandbox": "cargo build --release --manifest-path native/sandbox/Cargo.toml",
-    "test:desktop": "playwright test --config tests/electron/playwright.config.mjs",
-    "build:backend:plugin": "python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend"
+    "test:desktop": "playwright test --config tests/electron/playwright.config.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -34,9 +31,6 @@
     "@commerce/plugin-sdk": "file:packages/plugin-sdk",
     "@deepseek-ai/dsh": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-app-boot": "0.2.1-alpha.1",
-    "@tauri-apps/api": "^2.12.1",
-    "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-updater": "^2.13.1",
     "adm-zip": "0.5.16",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
@@ -52,7 +46,6 @@
   "devDependencies": {
     "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2.12.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.4",
     "@types/react": "^19.0.0",

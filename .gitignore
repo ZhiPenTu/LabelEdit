@@ -14,11 +14,8 @@ output/
 .uv-cache/
 *.tsbuildinfo
 
-# Tauri
-src-tauri/target/
-src-tauri/updater.key
-src-tauri/resources/backend/*
-!src-tauri/resources/backend/.gitkeep
+# Private legacy signing material (never commit)
+.private/
 dist-backend/
 build/
 native/sandbox/target/

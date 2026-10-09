@@ -17,10 +17,8 @@ def run(*args: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--distpath", type=Path, default=ROOT / "src-tauri/resources/backend")
+    parser.add_argument("--distpath", type=Path, default=ROOT / "resources/generated/plugins/official.labeledit/backend")
     parser.add_argument("--workpath", type=Path, default=ROOT / "build/backend")
-    parser.add_argument("--baseline-spec", type=Path, help="Optional original spec for a comparison in the same environment")
-    parser.add_argument("--baseline-distpath", type=Path, default=ROOT / "output/baseline-backend")
     options = parser.parse_args()
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Backend packaging requires Python 3.12.")
@@ -32,13 +30,20 @@ def main() -> None:
         environment = Path(directory)
         venv.EnvBuilder(with_pip=True, symlinks=False).create(environment)
         python = str(environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python"))
+        if sys.platform == "darwin":
+            # Some pinned releases offer both macOS 11/13 and optimized macOS
+            # 14 wheels. pip on a newer build host otherwise chooses the latter.
+            wheels = environment / "compatible-wheels"
+            run(python, "-m", "pip", "download", "--only-binary=:all:", "--no-deps",
+                "--platform", "macosx_13_0_arm64", "--python-version", "312",
+                "--implementation", "cp", "--dest", str(wheels),
+                "numpy==2.2.6", "onnxruntime==1.23.2")
+            run(python, "-m", "pip", "install", "--no-deps", *(str(wheel) for wheel in wheels.glob("*.whl")))
         run(python, "-m", "pip", "install", "--disable-pip-version-check", "--timeout", "30", "--retries", "2", "-r", str(ROOT / "requirements-build.txt"))
         run(python, "-m", "pip", "check")
         run(python, "-m", "backend.ocr_service")
         def package(spec: Path, destination: Path, work: Path) -> None:
             run(python, "-m", "PyInstaller", "--noconfirm", "--distpath", str(destination.resolve()), "--workpath", str(work.resolve()), str(spec.resolve()))
-        if options.baseline_spec:
-            package(options.baseline_spec, options.baseline_distpath, ROOT / "output/baseline-clean-build")
         package(ROOT / "scripts/pyinstaller/label-edit-backend.spec", options.distpath, options.workpath)
 
 

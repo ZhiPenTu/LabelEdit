@@ -206,8 +206,8 @@ export function useEditor() {
       const exported = await api.export(before.document.id, before.edits);
       if (!isCurrent(before.document.id, generation)) return;
       if (nativeDownload.current) URL.revokeObjectURL(nativeDownload.current);
-      const url = window.commercePlugin ? URL.createObjectURL(exported) : api.downloadUrl(before.document.id);
-      nativeDownload.current = window.commercePlugin ? url : null;
+      const url = URL.createObjectURL(exported);
+      nativeDownload.current = url;
       const filename = before.document.filename.replace(/\.pdf$/i, '') + ' - 已编辑.pdf';
       send({ type: 'patch', patch: { download: { url, filename }, notice: 'PDF 已生成。若下载未开始，可点击下方链接。' } });
       const anchor = window.document.createElement('a');

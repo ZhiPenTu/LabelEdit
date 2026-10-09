@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
-import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 project_root = Path.cwd().resolve()
@@ -27,18 +26,6 @@ for pkg in ["pypdfium2", "pypdfium2_raw", "onnxruntime", "cv2", "rapidocr", "rep
         pass
 
 hiddenimports = [
-    "uvicorn",
-    "uvicorn.logging",
-    "uvicorn.loops",
-    "uvicorn.loops.auto",
-    "uvicorn.protocols",
-    "uvicorn.protocols.http",
-    "uvicorn.protocols.http.auto",
-    "uvicorn.lifespan",
-    "uvicorn.lifespan.off",
-    "uvicorn.lifespan.on",
-    "fastapi",
-    "starlette",
     "pypdf",
     "pypdfium2",
     "pypdfium2_raw",
@@ -53,14 +40,14 @@ hiddenimports = [
     "PIL",
 ]
 
-for pkg in ["uvicorn", "fastapi", "starlette", "rapidocr", "reportlab"]:
+for pkg in ["rapidocr", "reportlab"]:
     try:
         hiddenimports.extend(collect_submodules(pkg))
     except Exception:
         pass
 
 a = Analysis(
-    [str(project_root / "backend" / ("rpc_entry.py" if os.environ.get("COMMERCE_BACKEND_RPC") == "1" else "desktop_entry.py"))],
+    [str(project_root / "backend" / "rpc_entry.py")],
     pathex=[str(project_root)],
     binaries=binaries,
     datas=datas,

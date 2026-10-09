@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename, rm, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID, createHash, verify } from 'node:crypto';
+import { randomUUID, createHash, verify, createPublicKey } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import semver from 'semver';
 import { validateManifest, safeRelative, confinedPath, TARGET } from './security.mjs';
@@ -8,7 +8,9 @@ export const MAX_PACKAGE_BYTES = 512 * 1024 * 1024;
 export function verifyArtifact(bytes, record, publicKey) {
   if (!publicKey || !record?.signature || !record?.sha256 || record.platform !== TARGET) throw new Error('市场制品缺少可信签名或平台信息。');
   if (createHash('sha256').update(bytes).digest('hex') !== record.sha256) throw new Error('插件包校验失败。');
-  if (!verify(null, bytes, publicKey, Buffer.from(record.signature, 'base64'))) throw new Error('插件签名无效。');
+  const key = typeof publicKey === 'string' || Buffer.isBuffer(publicKey) ? createPublicKey(publicKey) : publicKey;
+  if (key.asymmetricKeyType !== 'ed25519') throw new Error('市场签名必须使用 Ed25519。');
+  if (!verify(null, bytes, key, Buffer.from(record.signature, 'base64'))) throw new Error('插件签名无效。');
 }
 export function inspectPackage(bytes) {
   if(bytes.length>MAX_PACKAGE_BYTES)throw new Error('插件包过大。');
@@ -85,7 +87,7 @@ export class PluginManager {
         if (source === 'market' && installed && !semver.gt(m.version, installed.version)) throw new Error('市场版本必须高于已安装版本。');
         const conflicts = (await this.list()).filter(p => p.id !== m.id && p.enabled && (p.services?.provides ?? []).some(service => m.services?.provides?.includes(service)));
         if (conflicts.length) throw new Error('服务已由其他插件提供：' + conflicts.map(p => p.title).join('、'));
-        const previous = this.state.plugins[m.id] ? structuredClone(this.state.plugins[m.id]) : null;
+        const previous = this.state.plugins[m.id] && !this.state.plugins[m.id].removed ? structuredClone(this.state.plugins[m.id]) : null;
         const relative = 'installed/' + m.id + '/' + m.version + '-' + randomUUID();
         const folder = path.join(this.root, relative); await mkdir(path.dirname(folder), { recursive: true }); await rename(staged, folder);
         await this.stop(m.id);
@@ -96,9 +98,16 @@ export class PluginManager {
       } finally { await rm(staged, { recursive: true, force: true }); }
     });
   }
-  async setEnabled(id, enabled) { return this.transaction(async () => { await this.get(id); await this.stop(id); this.state.plugins[id] = { ...this.state.plugins[id], enabled: Boolean(enabled) }; await this.persist(); }); }
-  async uninstall(id) { return this.transaction(async () => { await this.get(id); await this.stop(id); const row = this.state.plugins[id]; this.state.plugins[id] = { removed: true }; await this.persist(); for (let version = row; version; version = version.previous) if (version.folder) await rm(await confinedPath(this.root, version.folder), { recursive: true, force: true }); }); }
-  async rollback(id) { return this.transaction(async () => { const row = this.state.plugins[id]; if (!row?.previous && !this.defaults.has(id)) throw new Error('没有可恢复的版本。'); await this.stop(id); if (row.previous) this.state.plugins[id] = row.previous; else delete this.state.plugins[id]; await this.persist(); }); }
+  async setEnabled(id, enabled) { return this.transaction(async () => {
+    await this.get(id);const previous=this.state.plugins[id];await this.stop(id);
+    this.state.plugins[id]={...previous,enabled:Boolean(enabled)};
+    try {if(enabled){const item=await this.get(id);if(item.missing.length)throw new Error('缺少服务依赖：'+item.missing.join('、'));await this.probe(item);}await this.persist();}
+    catch(error){await this.stop(id);if(previous)this.state.plugins[id]=previous;else delete this.state.plugins[id];throw error;}
+  }); }
+  async uninstall(id) { return this.transaction(async () => { await this.get(id); await this.stop(id); const row = this.state.plugins[id]; this.state.plugins[id] = { removed: true }; await this.persist(); await rm(path.join(this.root,'installed',id),{recursive:true,force:true,maxRetries:5,retryDelay:100}); }); }
+  async rollback(id) { return this.transaction(async () => { const row = this.state.plugins[id]; if (!row?.previous && !this.defaults.has(id)) throw new Error('没有可恢复的版本。'); await this.stop(id); if (row.previous) this.state.plugins[id] = row.previous; else delete this.state.plugins[id];
+    try {const target=await this.get(id);if(target.missing.length)throw new Error('恢复版本缺少服务依赖。');if(target.enabled)await this.probe(target);await this.persist();}
+    catch(error){await this.stop(id);this.state.plugins[id]=row;throw error;} }); }
 }
 export async function boundedDownload(url, limit = MAX_PACKAGE_BYTES, signal) {
   const parsed = new URL(url); if (parsed.protocol !== 'https:') throw new Error('下载地址必须使用 HTTPS。');

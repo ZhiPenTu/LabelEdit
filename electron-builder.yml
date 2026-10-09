@@ -17,12 +17,14 @@ extraResources:
   - from: resources/generated
     to: commerce
 mac:
+  icon: desktop/icons/icon.icns
   target: [dmg, zip]
   minimumSystemVersion: '13.0'
   hardenedRuntime: true
   notarize: true
   entitlements: desktop/entitlements.mac.plist
 win:
+  icon: desktop/icons/icon.ico
   target: [nsis]
   verifyUpdateCodeSignature: true
 nsis:

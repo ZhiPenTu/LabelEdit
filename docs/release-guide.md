@@ -1,6 +1,6 @@
 # 开发、验证和正式发布
 
-新底座支持 macOS 13+ Apple Silicon、Windows 10+ x64。旧 Tauri 用户手动安装，旧版下载继续保留。不要将 v0.2.0 发布到 Tauri 工作流。
+新底座支持 macOS 13+ Apple Silicon、Windows 10+ x64。旧 Tauri 用户手动安装。旧工程、发布工作流、下载与更新清单已按用户决定移除，源码历史和版本标签保留。
 
 ## 本地开发
 
@@ -12,8 +12,7 @@ node node_modules/electron/install.js
 python -m pip install -r requirements-dev.txt
 python -m backend.ocr_service
 npm run build:sandbox
-# 设置环境变量 COMMERCE_BACKEND_RPC=1 后执行（PowerShell 使用 $env:COMMERCE_BACKEND_RPC='1'）
-python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+python scripts/build_backend.py
 npm run build
 npm run platform:prepare
 npm run desktop:start
@@ -29,7 +28,7 @@ GitHub Secrets：`MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`WIN_CSC_LINK`、`WIN
 
 正式发布前手动完成最低支持系统安装、标准 Electron 更新（旧底座→新底座）、下载失败与恢复、真实 remove.bg 单图/缺少密钥/额度/取消/网络失败验收。标签发布只应在这些门槛通过后进行。当前证书和 API 凭据按用户决定稍后配置。
 
-旧客户端仍请求 `releases/latest/download/latest.json`，所以每个新底座 Release 必须附带从 v0.1.5 原样复制的 Tauri `latest.json`；其中 URL、签名和版本继续指向 v0.1.5。新底座使用 Electron `latest.yml` / `latest-mac.yml`。不要把新底座版本写入旧清单。
+底座只发布 Electron `latest.yml` / `latest-mac.yml`，不再生成旧 Tauri 更新清单。
 
 发布目录后将生成的 `commerce-market.json` 内容更新到 `market/catalog.json`。后续独立插件发布只更新制品和此目录，无需底座重新发版。
 

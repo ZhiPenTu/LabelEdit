@@ -54,12 +54,12 @@ def _verify(key: str) -> None:
     try:
         stat = path.stat()
     except OSError as error:
-        raise RuntimeError("OCR 模型尚未安装，请运行 bash scripts/setup-backend.sh。") from error
+        raise RuntimeError("OCR 模型尚未安装，请运行 python -m backend.ocr_service。") from error
     identity = (stat.st_size, stat.st_mtime_ns)
     if _VERIFIED.get(key) == identity:
         return
     if _hash(path) != MODELS[key][1]:
-        raise RuntimeError("OCR 模型校验失败，请重新运行 bash scripts/setup-backend.sh。")
+        raise RuntimeError("OCR 模型校验失败，请重新运行 python -m backend.ocr_service。")
     _VERIFIED[key] = identity
 
 

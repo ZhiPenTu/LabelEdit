@@ -1,5 +1,6 @@
 import {lookup} from 'node:dns/promises';
 import https from 'node:https';
+import {isIP} from 'node:net';
 import {Readable} from 'node:stream';
 export function publicAddress(address) {
  if(address.includes(':')) return /^[23][a-f0-9]{3}:/i.test(address) && !/^2001:(db8|0):/i.test(address);
@@ -7,9 +8,14 @@ export function publicAddress(address) {
  const [a,b,c]=parts;return a>0&&a<224&&a!==10&&a!==127&&!(a===169&&b===254)&&!(a===172&&b>=16&&b<=31)&&!(a===192&&(b===168||b===0&&c===0||b===0&&c===2))&&!(a===100&&b>=64&&b<=127)&&!(a===198&&(b===18||b===19||b===51&&c===100))&&!(a===203&&b===0&&c===113);
 }
 // Pin the resolved public IP for this request, while keeping the declared host for TLS.
+export function routedAddress(address,hostname) {
+  // System TUN clients map public hostnames into the benchmarking range. TLS
+  // still verifies the declared host; literal IP/local names never get this exception.
+  return publicAddress(address) || /^198\.(18|19)\./.test(address) && !isIP(hostname) && hostname.includes('.') && !/\.(local|localhost|internal)$/.test(hostname);
+}
 export async function secureRequest(address,options) {
  const url=new URL(address);if(url.protocol!=='https:'||url.username||url.password)throw new Error('网络请求地址无效。');
- const resolved=await lookup(url.hostname,{all:true});if(!resolved.length||resolved.some(row=>!publicAddress(row.address)))throw new Error('插件网络代理禁止访问本机和私有网络。');
+ const resolved=await lookup(url.hostname,{all:true});if(!resolved.length||resolved.some(row=>!routedAddress(row.address,url.hostname)))throw new Error('插件网络代理禁止访问本机和私有网络。');
  options.signal?.throwIfAborted();const selected=resolved[0],request=new Request(address,options),body=request.body?Buffer.from(await request.arrayBuffer()):null;
  return new Promise((resolve,reject)=>{
   const headers=Object.fromEntries(request.headers);if(body)headers['content-length']=String(body.length);

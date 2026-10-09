@@ -1,0 +1,19 @@
+import {test,expect,_electron as electron} from '@playwright/test';import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';import {generateKeyPairSync,sign,createHash} from 'node:crypto';import os from 'node:os';import path from 'node:path';import AdmZip from 'adm-zip';
+const root=process.cwd(),configFile=path.join(root,'resources/generated/market.json'),moduleURL=new URL('../../desktop/main.mjs',import.meta.url).href;
+async function fixtureFetch(app,catalog,bytes){await app.evaluate((_,value)=>{globalThis.fetch=async address=>new Response(String(address).endsWith('/catalog.json')?JSON.stringify(value.catalog):Buffer.from(value.bytes,'base64'));}, {catalog,bytes:bytes.toString('base64')});}
+test('signed marketplace install/update, failed signature preservation and kernel crash recovery',async()=>{
+ const temp=await mkdtemp(path.join(os.tmpdir(),'commerce-market-ui-')),previous=await readFile(configFile),{privateKey,publicKey}=generateKeyPairSync('ed25519');let app;
+ try{
+  await writeFile(configFile,JSON.stringify({url:'https://market.example/catalog.json',publicKey:publicKey.export({type:'spki',format:'pem'})}));
+  app=await electron.launch({args:[root,'--user-data-dir='+path.join(temp,'data')],timeout:20000});const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
+  let bytes=await readFile('release/official.removebg-0.1.0.ecplugin');
+  function catalog(version,notes,signature=sign(null,bytes,privateKey).toString('base64')){return {schemaVersion:1,plugins:[{id:'official.removebg',title:'AI 抠图',description:'商品图片处理',version,releaseNotes:notes,artifacts:{[process.platform+'-'+process.arch]:{url:'https://market.example/tool.ecplugin',sha256:createHash('sha256').update(bytes).digest('hex'),signature}}}]};}
+  await fixtureFetch(app,catalog('0.1.0','第一版'),bytes);await page.getByRole('button',{name:'插件市场',exact:true}).click();await page.getByRole('button',{name:'安装插件',exact:true}).click();await expect(page.getByRole('button',{name:'已安装',exact:true})).toBeVisible();
+  const zip=new AdmZip(bytes),pkg=JSON.parse(zip.readAsText('package.json'));pkg.version='0.2.0';pkg.commerce.releaseNotes='最新变更：新增预览';zip.updateFile('package.json',Buffer.from(JSON.stringify(pkg)));bytes=zip.toBuffer();
+  await fixtureFetch(app,catalog('0.2.0',pkg.commerce.releaseNotes),bytes);await page.getByRole('button',{name:'工具中心',exact:true}).click();await page.getByRole('button',{name:'插件市场',exact:true}).click();await expect(page.getByText(pkg.commerce.releaseNotes,{exact:true})).toBeVisible();await expect(page.getByText('第一版',{exact:true})).toHaveCount(0);await page.getByRole('button',{name:'更新插件',exact:true}).click();await expect(page.getByRole('button',{name:'已安装',exact:true})).toBeVisible();
+  await fixtureFetch(app,catalog('0.3.0','坏签名',Buffer.alloc(64).toString('base64')),bytes);await page.getByRole('button',{name:'工具中心',exact:true}).click();await page.getByRole('button',{name:'插件市场',exact:true}).click();await page.getByRole('button',{name:'更新插件',exact:true}).click();await expect(page.getByRole('alert')).toContainText('签名无效');
+  await page.getByRole('button',{name:'工具中心',exact:true}).click();await expect(page.getByText('v0.2.0 · 已启用 · 市场签名验证',{exact:true})).toBeVisible();
+  await app.evaluate(async(_,url)=>{const vm=process.getBuiltinModule('node:vm');const runtime=await vm.runInThisContext('import('+JSON.stringify(url)+')',{importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});runtime.host.kill();},moduleURL);
+  await expect(page.getByText(/Harness 内核已退出/)).toBeVisible();await page.getByRole('button',{name:'重新启动内核'}).click();await expect(page.getByText('Harness 内核已连接')).toBeVisible();await expect(page.getByRole('heading',{name:'AI 抠图',exact:true})).toBeVisible();
+ }finally{if(app)await app.close();await writeFile(configFile,previous);await rm(temp,{recursive:true,force:true});}
+});

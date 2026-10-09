@@ -10,6 +10,7 @@ import { FileBroker, NetworkBroker } from './brokers.mjs';
 import { Credentials } from './credentials.mjs';
 import updater from 'electron-updater';
 const { autoUpdater } = updater;
+import {validateCatalog} from './catalog.mjs';
 import {latestReleaseNotes} from './updates.mjs';
 app.setName('Commerce Tools');
 const primary = app.requestSingleInstanceLock();
@@ -95,8 +96,7 @@ async function catalog() {
   const config = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
   if (!config.url || !config.publicKey) return { items: [], configured: false, message: '插件目录尚未发布。可以导入本地插件包。' };
   const value = JSON.parse((await boundedDownload(config.url, 1024 * 1024)).toString());
-  if (value.schemaVersion !== 1 || !Array.isArray(value.plugins)) throw new Error('市场目录格式无效。');
-  return { items: value.plugins, configured: true };
+  return { items: validateCatalog(value), configured: true };
 }
 async function systemInvoke(service, method, args = {}) {
   if (service === 'home' && method === 'list') return (await manager.list()).map(sanitizePlugin);
@@ -189,4 +189,4 @@ if (!primary) app.quit();
 else void main().catch(error => { console.error(error); app.quit(); });
 
 // Trusted main-process integration access; never exposed over renderer IPC.
-export { network, workers, manager };
+export { network, workers, manager, host };
