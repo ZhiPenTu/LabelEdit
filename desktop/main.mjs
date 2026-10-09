@@ -185,7 +185,7 @@ protocol.handle('commerce', async request => { try { const url = new URL(request
 await window.loadURL(process.env.COMMERCE_DEV_URL || 'commerce://shell/index.html');
 void startKernel().catch(error => { kernelError = error.message; changed(); });
 autoUpdater.autoDownload = false; autoUpdater.fullChangelog = false;
-for (const [event, status] of [['checking-for-update', 'checking'], ['update-not-available', 'current'], ['update-available', 'available'], ['update-downloaded', 'downloaded']]) autoUpdater.on(event, info => { update.status = status; update.error = null; if (info?.version) update.version = info.version; if (info?.releaseNotes) update.notes = latestReleaseNotes(info); changed(); });
+for (const [event, status] of [['checking-for-update', 'checking'], ['update-not-available', 'current'], ['update-available', 'available'], ['update-downloaded', 'downloaded']]) autoUpdater.on(event, info => { update.status = status; update.error = null; if (info?.version) { update.version = info.version; update.notes = latestReleaseNotes(info); } changed(); });
 autoUpdater.on('download-progress', progress => { update.status = 'downloading'; update.progress = progress.percent; changed(); });
 autoUpdater.on('error', error => { update.status = 'error'; update.error = error.message; changed(); });
 app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; void Promise.all([...views.keys()].map(closeView)).then(() => workers.stopAll()).finally(() => { host?.postMessage({ type: 'shutdown' }); setTimeout(() => { host?.kill(); app.quit(); }, 300); }); });
