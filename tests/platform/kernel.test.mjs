@@ -12,12 +12,17 @@ test('real Harness profile loads only our seven protected system services and di
     assert.deepEqual([...k.systems.keys()], ['home', 'market', 'plugins', 'settings', 'updates', 'credentials', 'sandbox']);
     assert.deepEqual(await k.systems.get('home').invoke('list', {}), ['test']); assert.equal(calls[0][0], 'home');
     assert.equal(k.ctx.get('agents'), undefined); assert.equal(k.ctx.get('webserver'), undefined);
-    await k.reconcile([{ id: 'local.fixture', enabled: true, services: { provides: ['local.echo'] } }]);
+    const registered = await k.reconcile([{ id: 'local.fixture', enabled: true, services: { provides: ['local.echo'] } }]);
+    assert.deepEqual(registered, ['local.echo']);
     assert.ok(k.tools.has('local.echo'));
     assert.deepEqual(await k.call('tool', 'local.echo', 'echo', { text: 'hello' }, 'local.fixture'), ['test']);
     assert.equal(calls.at(-1)[0], 'sandbox');
-    await k.reconcile([]); assert.equal(k.tools.size, 0);
+    const cleared = await k.reconcile([]); assert.equal(k.tools.size, 0); assert.deepEqual(cleared, []);
     await assert.rejects(k.call('tool', 'local.echo', 'echo', {}, 'local.fixture'));
+    const reinstalled = await k.reconcile([{ id: 'local.fixture', enabled: true, services: { provides: ['local.echo'] } }]);
+    assert.deepEqual(reinstalled, ['local.echo']);
+    assert.ok(k.tools.has('local.echo'));
+    assert.deepEqual(await k.call('tool', 'local.echo', 'echo', { text: 'hello-again' }, 'local.fixture'), ['test']);
     await k.dispose(); assert.equal(k.systems.size, 0);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
