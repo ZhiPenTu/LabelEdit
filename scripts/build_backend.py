@@ -37,7 +37,7 @@ def main() -> None:
             run(python, "-m", "pip", "download", "--only-binary=:all:", "--no-deps",
                 "--platform", "macosx_13_0_arm64", "--python-version", "312",
                 "--implementation", "cp", "--dest", str(wheels),
-                "numpy==2.2.6", "onnxruntime==1.23.2")
+                "numpy==2.2.6", "onnxruntime==1.19.2")
             run(python, "-m", "pip", "install", "--no-deps", *(str(wheel) for wheel in wheels.glob("*.whl")))
         run(python, "-m", "pip", "install", "--disable-pip-version-check", "--timeout", "30", "--retries", "2", "-r", str(ROOT / "requirements-build.txt"))
         run(python, "-m", "pip", "check")
