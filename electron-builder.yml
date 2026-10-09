@@ -13,12 +13,14 @@ afterPack: desktop/after-pack.cjs
 forceCodeSigning: false
 npmRebuild: false
 asarUnpack:
-  - node_modules/**/*
+  - node_modules/**/*.node
 extraResources:
   - from: resources/generated
     to: commerce
 mac:
   icon: desktop/icons/icon.icns
+  asarUnpack:
+    - node_modules/**/*
   target: [dmg, zip]
   minimumSystemVersion: '14.0'
   hardenedRuntime: true

@@ -88,5 +88,6 @@ test('unsigned packaging discards ambient certificates and signed packaging rest
  assert.throws(()=>packagingOptions('invalid','darwin'),/签名模式/);
  const plain=load(await readFile('electron-builder.yml','utf8')),signed=load(await readFile('electron-builder.signed.yml','utf8'));
  assert.equal(plain.mac.identity,'-');assert.equal(plain.mac.notarize,false);
+ assert.deepEqual(plain.asarUnpack,['node_modules/**/*.node']);assert.deepEqual(plain.mac.asarUnpack,['node_modules/**/*']);
  assert.equal(signed.forceCodeSigning,true);assert.equal(signed.mac.notarize,true);assert.equal(signed.win.verifyUpdateCodeSignature,true);
 });

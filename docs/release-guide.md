@@ -49,7 +49,7 @@ macOS 的更新顺序为签名组件清单、ZIP 差量下载、完整 ZIP。没
 
 ZIP 和组件包在用户数据目录的 `updates/archives`、`updates/components` 中缓存。已完成缓存重新计算 SHA-256 后复用；中断的 `.part` 和差量 `.delta` 文件保留，手动重试时发送精确的 HTTP Range。服务器返回 200 或错误范围时重新下载，绝不将整个响应追加到已有分段。ZIP 差量要求此前通过校验的完整 ZIP 及对应 blockmap；首次启用且没有基线时需要下载一次安装包。成功后只保留当前/前一 ZIP 和当前组件缓存，七天前的其他残留分段会清理。
 
-`asarUnpack` 将生产依赖单独存放，避免小幅界面改动使整个依赖包失效。组件按最终完成代码签名的 `.app` 拆为 `core`、`electron`、`dependencies`、`ocr-runtime`、`ocr-models`、`plugin-ui`。主程序和 Helper 随应用版本/资源封印变化，归入 core；独立 Electron framework 才属于 electron。完整离线安装包继续包含所有运行资源和四个 OCR 模型。组件按组比较目标清单中的文件哈希、权限与链接，变化的组整体下载；本功能不是任意单文件补丁，也不在已安装应用上直接覆盖文件。
+macOS 的 `asarUnpack` 将生产依赖单独存放，避免小幅界面改动使整个依赖包失效。Windows 保持原安装包布局。组件按最终完成代码签名的 `.app` 拆为 `core`、`electron`、`dependencies`、`ocr-runtime`、`ocr-models`、`plugin-ui`。主程序和 Helper 随应用版本/资源封印变化，归入 core；独立 Electron framework 才属于 electron。完整离线安装包继续包含所有运行资源和四个 OCR 模型。组件按组比较目标清单中的文件哈希、权限与链接，变化的组整体下载；本功能不是任意单文件补丁，也不在已安装应用上直接覆盖文件。
 
 `scripts/component-artifacts.mjs` 生成六类 ZIP 和 `CommerceTools-<version>-mac-arm64.components.json`。清单包含产品、平台、版本、文件清单及各 ZIP 的 SHA-256/大小/固定仓库 URL；使用现有生产 Ed25519 密钥签名，签名消息带独立的组件更新域前缀，不能复用插件包签名。ZIP 仅包含哈希命名的普通文件，权限和安全的相对链接来自签名清单。客户端在暂存目录重建完整应用，再逐文件核对、验证 codesign，随后使用原有替换/重启/恢复助手。用户配置、独立安装插件及凭据目录不参与应用组件替换。
 
