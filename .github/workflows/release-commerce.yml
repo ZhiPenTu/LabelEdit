@@ -53,6 +53,7 @@ jobs:
           npm run platform:prepare
           node scripts/verify-macos-runtime.mjs
           npm run test:platform
+          node scripts/test-plugin-navigation.mjs
           npx playwright test --config tests/electron/playwright.config.mjs
       - name: Build signed and notarized installers
         shell: bash

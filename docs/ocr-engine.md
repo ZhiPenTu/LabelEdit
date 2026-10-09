@@ -8,14 +8,12 @@
 | --- | --- | --- |
 | RapidOCR / ONNX | [官方安装说明](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/)说明旧 `rapidocr_onnxruntime` 等包正逐步退出维护，开发继续在 `rapidocr`。支持 ONNX Runtime 本地推理，输出四边形文字框、识别内容及置信度；[官方参数](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/parameters/)支持模型、语言、坐标粒度和 CPU 线程配置。 | [RapidOCR Apache-2.0](https://github.com/RapidAI/RapidOCR/blob/main/LICENSE)，[ONNX Runtime MIT](https://github.com/microsoft/onnxruntime/blob/main/LICENSE)。本次集成并实测。 |
 | PaddleOCR | [PP-OCRv5 多语种文档](https://www.paddleocr.ai/latest/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5_multi_languages.html)说明按语言组选识别模型；完整 Paddle 栈也提供检测和识别坐标。 | [PaddleOCR Apache-2.0](https://github.com/PaddlePaddle/PaddleOCR/blob/main/LICENSE)。通过 RapidOCR 使用其模型，不增加完整 Paddle 框架依赖。 |
-| Tesseract | [官方项目](https://github.com/tesseract-ocr/tesseract)提供命令行和库；[TSV 输出](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html)含位置和置信度；[官方语言数据](https://tesseract-ocr.github.io/tessdoc/Data-Files.html)按语言安装。成熟跨平台方案，但需要另外安装二进制和 traineddata。 | [Apache-2.0](https://github.com/tesseract-ocr/tesseract/blob/main/LICENSE)。本机未安装，不作为默认引擎。未对该标签做 Tesseract 准确率比较。 |
-| Apple Vision | [官方文字识别接口](https://developer.apple.com/documentation/vision/recognizing-text-in-images)返回识别候选和矩形坐标；受 Apple 平台限制。 | Apple SDK，不能作为跨平台开源默认运行环境。本机 Swift 能列出中英文等支持语言，但在当前受限执行环境对样例执行识别返回 `nilError`，没有作为可用性占位。 |
 
 [RapidOCR 官方 PP-OCRv5 用法](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/how_to_use_ppocrv5/)支持明确指定检测/识别版本、模型类型和语言。[官方模型清单](https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml)提供固定版本地址及 SHA-256。当前上游同时提供更新的模型；本软件固定已实测的 PP-OCRv5 配置，后续升级应重复标签、多语种和导出验证。没有宣称所有场景下最高准确率。
 
 ## 安装、模型与离线运行
 
-按 [开发指南](release-guide.md)安装 `requirements-dev.txt`，运行 `python -m backend.ocr_service`。使用 Python 3.12 创建隔离的 `.venv`，按 `requirements.txt` 安装固定依赖。首次安装需要联网下载 Python 包和下列模型，之后识别不发送图片到外部服务。依赖 wheel 与模型合计需要数百 MB 磁盘空间，耗时取决于网络。Linux / Windows 的 wheel 与系统要求需在对应平台另行验证；本次已验证 macOS arm64、Python 3.12.14。
+按 [开发指南](release-guide.md)安装 `requirements-dev.txt`，运行 `python -m backend.ocr_service`。使用 Python 3.12 创建隔离的 `.venv`，按 `requirements.txt` 安装固定依赖。构建时联网下载 Python 包和下列模型，随后将运行资源打包到 LabelEdit 插件。普通用户无需安装 Python 或下载模型。运行时通过系统沙箱内的 RPC 处理文件，识别不发送图片到外部服务。支持范围为 macOS 14+ arm64、Windows 10+ x64；各平台真实验收结果见 [实施状态](implementation-status.md)。
 
 | 用途 | 固定模型 |
 | --- | --- |
@@ -40,5 +38,5 @@
 
 - 禁止 `requests` 与 RapidOCR 下载入口后，新进程从本地模型成功识别中英文合成图片，确认初始化和推理无需联网。
 - 当前沙箱 RPC 回归导入真实标签，执行 OCR、修改批次文字、预览和导出；检查新文字、70×40 mm 页面尺寸与源文件不变。
-- 无修改导出与原文件字节一致；空白编辑预览与原预览一致。非法文件返回 400，非本机 Origin 返回 403；模型缺失的 OCR 请求返回明确的 503 错误。
-- 多次启动/关闭 TestClient 的临时文件生命周期验证通过；`pip check` 没有依赖冲突。PDF 几何、复杂样例和界面操作的后续测试见项目测试与 PDF 集成说明。
+- 无修改导出与原文件字节一致；空白编辑预览与原预览一致。非法文件和模型缺失通过 RPC 返回明确错误。
+- 真实沙箱验证权限边界，插件停用与应用退出释放处理程序及任务目录。PDF 几何与界面操作见项目测试、[PDF 集成说明](pdf-engine.md)和 [实施状态](implementation-status.md)。
