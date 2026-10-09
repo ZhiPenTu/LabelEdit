@@ -3,7 +3,7 @@ const platform=process.platform+'-'+process.arch,key=process.env.COMMERCE_PLUGIN
 if(!key)throw new Error('缺少插件市场签名密钥。');
 const {version:base}=JSON.parse(await readFile('package.json')),entries=[];
 await mkdir('release/market',{recursive:true});
-const packaged=process.platform==='darwin'?'release/desktop/mac-arm64/Commerce Tools.app/Contents/Resources/commerce/plugins/official.labeledit':'release/desktop/win-unpacked/resources/commerce/plugins/official.labeledit';
+const packaged=process.platform==='darwin'?'release/desktop/mac-arm64/Qingzuo.app/Contents/Resources/commerce/plugins/official.labeledit':'release/desktop/win-unpacked/resources/commerce/plugins/official.labeledit';
 for(const folder of [packaged,'plugins/removebg']){
  const pkg=JSON.parse(await readFile(path.join(folder,'package.json'))),m=pkg.commerce,name=`${m.id}-${pkg.version}-${platform}.ecplugin`,filename=path.join('release/market',name);
  await pack(path.resolve(folder),path.resolve(filename));const bytes=await readFile(filename);

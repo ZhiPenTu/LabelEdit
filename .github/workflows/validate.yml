@@ -81,7 +81,7 @@ jobs:
         shell: bash
         run: |
           node scripts/package-desktop.mjs --dir
-          if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"; fi
+          if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Qingzuo.app"; fi
           node scripts/test-packaged-desktop.mjs
       - uses: actions/upload-artifact@v4
         if: always()

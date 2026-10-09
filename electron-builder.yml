@@ -1,5 +1,5 @@
 appId: com.commerce.tools.desktop
-productName: Commerce Tools
+productName: Qingzuo
 artifactName: CommerceTools-${version}-${os}-${arch}.${ext}
 directories:
   output: release/desktop

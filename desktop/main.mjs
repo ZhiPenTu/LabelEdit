@@ -13,7 +13,12 @@ const { autoUpdater } = updater;
 import {validateCatalog} from './catalog.mjs';
 import {latestReleaseNotes, checkGitHubRelease, releaseDownloadPage} from './updates.mjs';
 import {desktopSigningMode} from './distribution.mjs';
+// Resolve the established profile before changing the display name. This also
+// preserves an explicit --user-data-dir supplied by integration tests/users.
 app.setName('Commerce Tools');
+const establishedUserData = app.getPath('userData');
+app.setName('Qingzuo');
+app.setPath('userData', establishedUserData);
 const primary = app.requestSingleInstanceLock();
 const root = fileURLToPath(new URL('../', import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'commerce', privileges: { standard: true, secure: true, supportFetchAPI: true } }, { scheme: 'commerce-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -243,7 +248,7 @@ manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.
   },
 });
 await manager.initialize();
-window = new BrowserWindow({ title: '电商工具中心', width: 1380, height: 900, minWidth: 1000, minHeight: 680, webPreferences: { preload: path.join(root, 'desktop/preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+window = new BrowserWindow({ title: '轻作 · Qingzuo', width: 1380, height: 900, minWidth: 1000, minHeight: 680, icon: path.join(root, 'desktop/icons/icon.png'), webPreferences: { preload: path.join(root, 'desktop/preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce://shell/') && !(process.env.COMMERCE_DEV_URL && url.startsWith(process.env.COMMERCE_DEV_URL + '/'))) event.preventDefault(); });
 protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return resourceResponse(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))); } catch { return new Response('Not found', { status: 404 }); } });

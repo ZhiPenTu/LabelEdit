@@ -15,14 +15,14 @@ export function TextSidebar({ regions, edits, selectedId, language, busy, recogn
   const editById = useMemo(() => new Map(edits.map(edit => [edit.id, edit])), [edits]);
   const displayed = regions.filter(region => `${region.text} ${editById.get(region.id)?.text ?? ''}`.toLocaleLowerCase().includes(filter));
   return <aside className="text-sidebar" aria-label="文字区域">
-    <div className="sidebar-heading"><h2>文字区域</h2><p>点击文字开始修改</p>
+    <div className="sidebar-heading"><h2>文字区域<span className="region-count">{regions.length} 个区域</span></h2><p>点击文字开始修改</p>
       <InputGroup><InputGroupInput aria-label="搜索文字" placeholder="搜索文字" value={search} onChange={event => setSearch(event.target.value)} /><InputGroupAddon><Search /></InputGroupAddon></InputGroup>
     </div>
     <div className="region-list" aria-label="识别到的文字">
-      {displayed.map(region => {
+      {displayed.map((region, index) => {
         const edit = editById.get(region.id);
         return <Button key={region.id} variant={selectedId === region.id ? 'secondary' : 'ghost'} className={cn('region-row', selectedId === region.id && 'region-selected')} disabled={busy} onClick={() => onSelect(region.id)} aria-pressed={selectedId === region.id} title={region.text || '手动框选区域'}>
-          <span className="truncate">{edit ? edit.text || '已清除文字' : region.text || '手动框选区域'}</span>{edit ? <span className="edit-dot" aria-label="已修改" /> : null}
+          <span className="region-number" aria-hidden="true">{index + 1}</span><span className="truncate">{edit ? edit.text || '已清除文字' : region.text || '手动框选区域'}</span>{edit ? <span className="edit-dot" aria-label="已修改" /> : null}
         </Button>;
       })}
       {!displayed.length ? <Empty className="list-empty"><EmptyHeader>{recognizing ? <LoaderCircle className="animate-spin" /> : null}<EmptyDescription>{recognizing ? '正在识别文字…' : filter ? '没有匹配的文字' : '使用「框选区域」选择需要修改的位置。'}</EmptyDescription></EmptyHeader></Empty> : null}
