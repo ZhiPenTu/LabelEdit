@@ -34,6 +34,14 @@ export const api = {
   async export(id: string, edits: TextEdit[]): Promise<Blob> {
     return nativeBlob(await native('export', { id, edits }));
   },
+  async save(blob: Blob, filename: string): Promise<boolean> {
+    if (!window.commercePlugin) throw new Error('请从工具中心保存文件。');
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 65536) binary += String.fromCharCode(...bytes.subarray(i, i + 65536));
+    const token = await window.commercePlugin.invoke<{ token: string }>('files.create', { data: btoa(binary), filename, mime: 'application/pdf' });
+    return window.commercePlugin.invoke<boolean>('files.save', { token: token.token, filename });
+  },
   imageUrl,
 };
 

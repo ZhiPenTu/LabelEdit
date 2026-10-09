@@ -15,12 +15,11 @@ export interface EditorState extends EditSnapshot {
   previewLoading: boolean;
   error: string | null;
   notice: string | null;
-  download: { url: string; filename: string } | null;
 }
 export const initialEditorState: EditorState = {
   document: null, page: 0, regionsByPage: {}, recognitionByPage: {}, edits: [], history: [],
   selectedId: null, language: 'latin', operation: null, previewUrl: null, previewLoading: false,
-  error: null, notice: null, download: null,
+  error: null, notice: null,
 };
 export type EditorAction =
   | { type: 'patch'; patch: Partial<EditorState> }
@@ -50,8 +49,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
     case 'rect': return { ...state,
       regionsByPage: { ...state.regionsByPage, [action.page]: (state.regionsByPage[action.page] ?? []).map(region => region.id === action.id ? { ...region, rect: action.rect } : region) },
-      edits: state.edits.map(edit => edit.id === action.id ? { ...edit, rect: action.rect } : edit), download: null, notice: null };
-    case 'commit': return { ...state, edits: action.edits, history: [...state.history, action.snapshot], previewUrl: action.previewUrl, download: null, notice: action.notice };
-    case 'undo': return { ...state, ...action.snapshot, history: state.history.slice(0, -1), previewUrl: action.previewUrl, download: null, notice: '已撤销上一次修改。' };
+      edits: state.edits.map(edit => edit.id === action.id ? { ...edit, rect: action.rect } : edit), notice: null };
+    case 'commit': return { ...state, edits: action.edits, history: [...state.history, action.snapshot], previewUrl: action.previewUrl, notice: action.notice };
+    case 'undo': return { ...state, ...action.snapshot, history: state.history.slice(0, -1), previewUrl: action.previewUrl, notice: '已撤销上一次修改。' };
   }
 }

@@ -63,8 +63,8 @@ async function openView(id, settings = false) {
       ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); ses.setPermissionCheckHandler(() => false);
       // Register in each storage partition explicitly. A scheme being handled
       // elsewhere does not install an identity-bound handler in this session.
-      ses.protocol.handle('commerce-plugin', request => servePlugin(request, id));
-      ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); callback({ cancel: !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id) }); });
+      ses.protocol.handle('commerce-plugin', request => { console.log('Plugin resource request:', id, new URL(request.url).pathname); return servePlugin(request, id); });
+      ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); const cancel = !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id); if(cancel)console.log('Plugin request blocked:',id,url.origin); callback({ cancel }); });
       ses.on('will-download', async (event, item) => { item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
       pluginSessions.set(id, ses);
     }
@@ -72,6 +72,7 @@ async function openView(id, settings = false) {
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     view.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
     view.webContents.on('will-attach-webview', event => event.preventDefault());
+    view.webContents.on('did-fail-load', (_event, code, description) => console.error('Plugin view failed:', id, code, description));
     window.contentView.addChildView(view); views.set(id, view); owners.set(view.webContents.id, id);
     try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
     catch (e) { await closeView(id); throw e; }
@@ -160,6 +161,10 @@ ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {
   const id = assertFrame(event); validateCall(method, args); const plugin = await manager.get(id);
   if (!plugin.enabled || plugin.missing.length || systems.length !== 7) throw new Error('插件或内核不可用。');
   if (method === 'files.pick') return files.pick(plugin, args);
+  if (method === 'files.create') {
+    if (!plugin.permissions.files || typeof args.data !== 'string' || args.data.length > 35_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(args.data) || typeof args.filename !== 'string' || args.filename.length > 240 || typeof args.mime !== 'string' || args.mime.length > 100) throw new Error('文件内容无效或未授权。');
+    return files.create(plugin, Buffer.from(args.data, 'base64'), args.filename, args.mime);
+  }
   if (method === 'files.read') return files.read(plugin, args.token);
   if (method === 'files.save') return files.save(plugin, args.token, args.filename);
   if (method.startsWith('credentials.')) {

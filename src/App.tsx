@@ -30,7 +30,7 @@ export default function App() {
     panelOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPanel(next);
   }
-  const textDraft = useTextDraft(`${editor.document?.id}:${editor.page}:${editor.selectedId}`, editor.selectedRegion, editor.selectedEdit, editor.invalidateDownload);
+  const textDraft = useTextDraft(`${editor.document?.id}:${editor.page}:${editor.selectedId}`, editor.selectedRegion, editor.selectedEdit, editor.clearNotice);
   const onOpen = () => input.current?.click();
   async function openFile(file: File) { setZoom(100); setTool('select'); await editor.upload(file); }
   function dragEnter(event: DragEvent<HTMLDivElement>) {
@@ -67,7 +67,7 @@ export default function App() {
       </Sheet> : null}
     </> : <EmptyState busy={editor.busy} onOpen={onOpen} onDemo={() => { void editor.openDemo(); }} />}
     {editor.error || editor.notice ? <Alert variant={editor.error ? 'destructive' : 'default'} role={editor.error ? 'alert' : 'status'} className="message-bar">
-      {editor.error ? <AlertCircle /> : <CheckCircle2 />}<AlertDescription><span>{editor.error || editor.notice}</span>{!editor.error && editor.download ? <a className="download-link" href={editor.download.url} download={editor.download.filename}>下载已生成 PDF</a> : null}</AlertDescription>
+      {editor.error ? <AlertCircle /> : <CheckCircle2 />}<AlertDescription><span>{editor.error || editor.notice}</span></AlertDescription>
       <Button variant="ghost" size="icon" className="message-close" aria-label="关闭提示" onClick={editor.error ? editor.clearError : editor.clearNotice}><X /></Button>
     </Alert> : null}
     {dragging ? <div className="drop-overlay"><div>松开以打开 PDF<span>{editor.busy ? '请等待当前操作完成' : '文件仅在本机处理'}</span></div></div> : null}

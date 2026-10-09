@@ -155,7 +155,6 @@ h2 { font-size: 14px; font-weight: 600; line-height: 1.4; }
 .empty-workspace { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; background: var(--canvas); padding: 24px; }
 .message-bar { flex-shrink: 0; border-radius: 0; border-width: 1px 0 0; padding: 12px 52px 12px 20px; }
 .message-close { position: absolute; right: 12px; top: 6px; }
-.download-link { margin-left: 12px; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .drop-overlay { position: fixed; inset: 10px; border: 2px dashed var(--primary); border-radius: 12px; background: color-mix(in srgb, var(--background) 95%, transparent); display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 100; }
 .drop-overlay > div { text-align: center; font-size: 24px; font-weight: 600; }
 .drop-overlay span { display: block; margin-top: 12px; color: var(--muted-foreground); font-size: 13px; font-weight: 400; }

@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useEditor } from '../useEditor';
 import type { PDFDocument, TextEdit, TextRegion } from './types';
 vi.mock('../api', () => ({
-  api: { demo: vi.fn(), upload: vi.fn(), recognize: vi.fn(), close: vi.fn().mockResolvedValue(undefined), preview: vi.fn(), export: vi.fn(), imageUrl: (id: string, page: number) => `/image/${id}/${page}` },
+  api: { demo: vi.fn(), upload: vi.fn(), recognize: vi.fn(), close: vi.fn().mockResolvedValue(undefined), preview: vi.fn(), export: vi.fn(), save: vi.fn().mockResolvedValue(true), imageUrl: (id: string, page: number) => `/image/${id}/${page}` },
   errorMessage: (error: unknown) => error instanceof Error ? error.message : 'failure',
 }));
 const doc: PDFDocument = { id: 'doc', filename: 'label.pdf', page_count: 2, pages: [0, 1].map(index => ({ index, width_pt: 200, height_pt: 100, width_mm: 70, height_mm: 40, rotation: 0, preview_url: `/image/doc/${index}` })) };
