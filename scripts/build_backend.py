@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import sys
+import sysconfig
 import shutil
 from tempfile import TemporaryDirectory
 import venv
@@ -57,6 +58,8 @@ def main() -> None:
     options = parser.parse_args()
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Backend packaging requires Python 3.12.")
+    if sys.platform == "darwin" and sysconfig.get_config_var("PYTHONFRAMEWORK"):
+        raise SystemExit("macOS backend packaging requires non-framework Python; use uv-managed CPython 3.12.11. Framework aliases cannot be both materialized for plugin ZIPs and codesigned as a framework bundle.")
     staging = ROOT / ".venv-packaging"
     staging.mkdir(exist_ok=True)
     # A new environment per build also prevents concurrent builds from sharing

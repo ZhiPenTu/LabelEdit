@@ -40,3 +40,5 @@ macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更
 ## macOS 14 运行资源
 
 本地 Python/OCR 运行资源的 267 个 Mach-O、完整 `.app` 的 295 个 Mach-O 部署版本检查通过；GitHub CI 的 Python 框架构建分别为 323 和 351 个，均支持部署目标 macOS 14.0。数量包含已转换为普通文件的内部库及框架别名。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。
+
+完整安装包的 CI 构建暴露了 Python framework 普通资源布局无法重新 codesign 的问题。macOS 打包改用与本机成功构建相同的 uv 0.11.6 / 独立 CPython 3.12.11；打包入口提前拒绝 framework Python。插件制品仍不接受符号链接，不通过忽略运行资源签名绕过此问题。

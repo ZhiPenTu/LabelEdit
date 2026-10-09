@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-需要 Node 24、Python 3.12、Rust。普通插件用户不需要这些开发依赖。
+需要 Node 24、Python 3.12、Rust。macOS 后端打包使用 uv 管理的独立 CPython 3.12.11，避免 framework 别名转成普通资源后导致代码签名结构冲突；CI 固定 uv 0.11.6，Windows 继续使用普通 Python 3.12。普通插件用户不需要这些开发依赖。
 
 ```sh
 npm ci --ignore-scripts
@@ -13,7 +13,9 @@ npm run build:harness-native
 python -m pip install -r requirements-dev.txt
 python -m backend.ocr_service
 npm run build:sandbox
-python scripts/build_backend.py
+# macOS 后端打包（Windows 使用 python scripts/build_backend.py）
+uv python install 3.12.11
+uv run --no-project --managed-python --python 3.12.11 python scripts/build_backend.py
 npm run build
 npm run platform:prepare
 npm run desktop:start
