@@ -27,7 +27,7 @@
 
 ## 尚未完成的公开发布门槛
 
-Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真实 API 与额度验收；Windows 真实进程/安装更新结果；macOS 13 最低支持版本的沙箱与安装回归。用户已确认稍后配置凭据，先完成实现与测试。当前验证制品不是正式公开发行版，不应标记全部五阶段验收完成。
+Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真实 API 与额度验收；Windows 真实进程/安装更新结果；macOS 14 最低支持版本的沙箱与安装回归。用户已确认稍后配置凭据，先完成实现与测试。当前验证制品不是正式公开发行版，不应标记全部五阶段验收完成。
 
 ## 旧代码清理
 

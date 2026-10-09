@@ -30,15 +30,6 @@ def main() -> None:
         environment = Path(directory)
         venv.EnvBuilder(with_pip=True, symlinks=False).create(environment)
         python = str(environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python"))
-        if sys.platform == "darwin":
-            # Some pinned releases offer both macOS 11/13 and optimized macOS
-            # 14 wheels. pip on a newer build host otherwise chooses the latter.
-            wheels = environment / "compatible-wheels"
-            run(python, "-m", "pip", "download", "--only-binary=:all:", "--no-deps",
-                "--platform", "macosx_13_0_arm64", "--python-version", "312",
-                "--implementation", "cp", "--dest", str(wheels),
-                "numpy==2.2.6", "onnxruntime==1.19.2")
-            run(python, "-m", "pip", "install", "--no-deps", *(str(wheel) for wheel in wheels.glob("*.whl")))
         run(python, "-m", "pip", "install", "--disable-pip-version-check", "--timeout", "30", "--retries", "2", "-r", str(ROOT / "requirements-build.txt"))
         run(python, "-m", "pip", "check")
         run(python, "-m", "backend.ocr_service")

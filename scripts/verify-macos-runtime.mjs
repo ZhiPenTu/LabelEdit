@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 // A bundle Info.plist cannot lower a dylib's actual deployment requirement.
 // Check every shipped Mach-O instead of trusting wheel tags or app metadata.
-export async function verifyMacRuntime(root, maximum = '13.0') {
+export async function verifyMacRuntime(root, maximum = '14.0') {
   let checked = 0;
   async function walk(folder) {
     for (const name of await readdir(folder)) {

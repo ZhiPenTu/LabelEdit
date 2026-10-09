@@ -19,7 +19,7 @@ extraResources:
 mac:
   icon: desktop/icons/icon.icns
   target: [dmg, zip]
-  minimumSystemVersion: '13.0'
+  minimumSystemVersion: '14.0'
   hardenedRuntime: true
   notarize: true
   entitlements: desktop/entitlements.mac.plist

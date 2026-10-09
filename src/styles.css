@@ -163,18 +163,6 @@ h2 { font-size: 14px; font-weight: 600; line-height: 1.4; }
 .editor-sheet .text-sidebar { flex: 1; border: 0; }
 .editor-sheet .inspector { flex: 1; border: 0; padding-top: 4px; }
 .editor-sheet .sidebar-heading h2, .editor-sheet .inspector > h2 { display: none; }
-.update-notes { max-height: 180px; overflow-y: auto; overflow-wrap: anywhere; color: var(--muted-foreground); font-size: 13px; line-height: 1.65; }
-.update-notes > * + * { margin-top: 8px; }
-.update-notes :is(h1, h2, h3, h4, h5, h6, strong) { color: var(--foreground); font-size: inherit; font-weight: 600; }
-.update-notes :is(ul, ol) { padding-left: 1.4em; }
-.update-notes ul { list-style: disc; }
-.update-notes ol { list-style: decimal; }
-.update-notes li + li { margin-top: 4px; }
-.update-notes a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
-.update-notes code { border-radius: 4px; background: var(--muted); padding: 1px 4px; font-size: 12px; }
-.update-notes pre { overflow-x: auto; border-radius: 6px; background: var(--muted); padding: 8px; }
-.update-notes pre code { padding: 0; }
-.update-notes blockquote { border-left: 2px solid var(--border); padding-left: 10px; }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1199px) {
