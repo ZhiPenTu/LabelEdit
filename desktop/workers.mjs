@@ -37,9 +37,11 @@ export class Workers {
         if (process.platform === 'darwin' && dir.endsWith('/Contents/MacOS')) readOnly.push(await realpath(path.join(dir, '../Frameworks')));
         else if (process.platform === 'win32') { for (const name of await readdir(dir)) if (/\.(dll|pak|dat|bin)$/i.test(name)) readOnly.push(path.join(dir, name)); }
       }
-      const child = await launchSandbox({ executable, args: node ? [entry] : [], readOnly, writable: [cwd], cwd, launcher: this.launcher, env: node ? { ELECTRON_RUN_AS_NODE: '1' } : {} });
+      // Artifacts reject symlinks on install. Avoid Node's realpath walk through
+      // ungranted drive ancestors in AppContainer without broadening its ACLs.
+      const child = await launchSandbox({ executable, args: node ? ['--preserve-symlinks', '--preserve-symlinks-main', entry] : [], readOnly, writable: [cwd], cwd, launcher: this.launcher, env: node ? { ELECTRON_RUN_AS_NODE: '1' } : {} });
       worker = new RpcWorker(child); worker.directory = cwd; worker.cleaned = child.cleanup.then(() => rm(cwd, { recursive: true, force: true, maxRetries:5, retryDelay:100 }));
-      await worker.call('health'); return worker;
+      const status=await worker.call('health');if(!status?.ready)throw new Error('插件本地服务尚未就绪。');return worker;
     } catch (e) { if(worker) {await worker.stop();await worker.cleaned;} else await rm(cwd,{recursive:true,force:true,maxRetries:5,retryDelay:100}); throw e; }
   }
   async stop(id) {

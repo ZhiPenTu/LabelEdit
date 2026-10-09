@@ -47,7 +47,7 @@ export class RpcWorker {
   call(method, args = {}) {
     if (this.closed) return Promise.reject(new Error('插件进程已停止。'));
     return new Promise((resolve, reject) => { const id = ++this.counter;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('插件处理超时。')); this.stop(); }, this.timeout);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('插件处理超时（' + method + '）。' + this.error)); void this.stop(); }, this.timeout);
       this.pending.set(id, { resolve, reject, timer });
       this.child.stdin.write(JSON.stringify({ id, method, args }) + '\n', error => { if (error) this.fail(error); });
     });

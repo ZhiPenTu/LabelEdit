@@ -25,22 +25,15 @@ fn quote_arg(value: &str) -> String {
     for c in value.chars() { if c == '\\' { slashes += 1; } else { out.extend(std::iter::repeat_n('\\', if c == '"' { slashes * 2 + 1 } else { slashes })); slashes = 0; out.push(c); } }
     out.extend(std::iter::repeat_n('\\', slashes * 2)); out.push('"'); out
 }
-fn ancestor_paths(p: &Policy) -> Vec<String> {
-    let mut ancestors=std::collections::BTreeSet::new();
-    for root in p.read_only.iter().chain(p.writable.iter()) {
-        let mut cursor=std::path::Path::new(root).parent();
-        while let Some(dir)=cursor { ancestors.insert(dir.to_string_lossy().into_owned()); cursor=dir.parent(); }
-    }
-    ancestors.into_iter().collect()
-}
-fn all_paths(p: &Policy) -> Vec<String> { let mut paths=ancestor_paths(p); paths.extend(p.read_only.iter().chain(p.writable.iter()).cloned()); paths }
+// Grants are confined to host-owned artifacts and the private job. Never update
+// ancestor ACLs: SetNamedSecurityInfoW can propagate them across an entire drive.
+fn all_paths(p: &Policy) -> Vec<String> { p.read_only.iter().chain(p.writable.iter()).cloned().collect() }
 pub fn launch(p: &Policy) -> Result<i32, Box<dyn std::error::Error>> { unsafe {
     let id = &p.container;
     let name = wide(&id); let mut sid = null_mut();
     let hr = CreateAppContainerProfile(name.as_ptr(), name.as_ptr(), name.as_ptr(), null(), 0, &mut sid);
     if hr < 0 { return Err(format!("CreateAppContainerProfile failed: {hr:x}").into()); }
     let _container = Container { name, sid, paths: all_paths(p) };
-    for root in ancestor_paths(p) { edit_acl(&root, sid, false, false, true)?; }
     for root in &p.read_only { edit_acl(root, sid, false, false, false)?; }
     for root in &p.writable {
         edit_acl(root, sid, true, false, false)?;
