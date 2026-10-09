@@ -1,6 +1,6 @@
 import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import os from 'node:os';import path from 'node:path';
-import {observeApplication} from './diagnostics.mjs';
+import {observeApplication,tracePluginLoads} from './diagnostics.mjs';
 const root=process.cwd(),cli=path.join(root,'packages/plugin-sdk/cli.mjs');
 async function choose(app,filename,save) { await app.evaluate(({dialog},value)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[value.filename]});dialog.showMessageBox=async()=>({response:1});if(value.save)dialog.showSaveDialog=async()=>({canceled:false,filePath:value.save});}, {filename,save}); }
 async function importPlugin(app,page,filename){await choose(app,filename);await page.getByRole('button',{name:'导入插件'}).click();}
@@ -10,7 +10,7 @@ test('desktop tool tabs, isolated native/web plugin import, offline LabelEdit, c
  try{
   for(const [name,native] of [['test-web',false],['test-native',true]]) {execFileSync(process.execPath,[cli,'create',name,...(native?['--native']:[])],{cwd:temporary});execFileSync(process.execPath,[cli,'pack',path.join(temporary,name),path.join(temporary,name+'.ecplugin')]);}
   app=await electron.launch({args:[root,'--user-data-dir='+path.join(temporary,'data')],timeout:20000});observeApplication(app);const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
-  await page.screenshot({path:'output/electron-tests/home.png'});
+  await page.screenshot({path:'output/electron-tests/home.png'});await tracePluginLoads(app);
   await importPlugin(app,page,path.join(temporary,'test-native.ecplugin'));await expect(page.getByRole('heading',{name:'test-native',exact:true})).toBeVisible();
   await page.locator('[data-slot="card"]').filter({hasText:'test-native'}).getByRole('button',{name:'打开工具'}).click();const native=await pluginPage(app,'local.test-native');await native.getByRole('button',{name:'运行示例'}).click();await expect(native.getByRole('status')).toHaveText('插件服务调用成功');
   expect(await native.evaluate(()=>({process:typeof process,require:typeof require,desktop:typeof window.commerceDesktop}))).toEqual({process:'undefined',require:'undefined',desktop:'undefined'});
@@ -30,5 +30,5 @@ test('desktop tool tabs, isolated native/web plugin import, offline LabelEdit, c
   await importPlugin(app,page,path.join(root,'release/official.removebg-0.1.0.ecplugin'));await page.getByRole('button',{name:'工具中心',exact:true}).click();await page.locator('[data-slot="card"]').filter({hasText:'AI 抠图'}).getByRole('button',{name:'打开工具'}).click();const reinstalled=await pluginPage(app,'official.removebg');await expect(reinstalled.locator('#key-status')).toContainText('尚未配置');
   await page.getByRole('button',{name:'插件管理',exact:true}).click();const nativeCard=page.locator('[data-slot="card"]').filter({hasText:'test-native'});await nativeCard.getByRole('button',{name:'停用',exact:true}).click();await expect(nativeCard.getByRole('button',{name:'启用',exact:true})).toBeVisible();expect(app.context().pages().some(p=>p.url().includes('local.test-native'))).toBe(false);await nativeCard.getByRole('button',{name:'卸载',exact:true}).click();await expect(nativeCard).toHaveCount(0);
   await page.getByRole('button',{name:'更新',exact:true}).click();await page.getByRole('button',{name:'检查更新'}).click();await expect(page.getByRole('alert')).toContainText('开发环境不检查安装包更新');
- }finally{if(app)await app.close();await rm(temporary,{recursive:true,force:true});}
+ }finally{if(app){await app.evaluate(({netLog})=>netLog.stopLogging());await app.close();}await rm(temporary,{recursive:true,force:true});}
 });
