@@ -169,7 +169,14 @@ credentials = new Credentials(launcher, 'profile.' + createHash('sha256').update
 workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
-manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(generated, 'plugins'), { publicKey: marketConfig.publicKey, stop: closeView, probe: async plugin => { if (plugin.backend) { await workers.start(plugin); await workers.stop(plugin.id); } } });
+manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(generated, 'plugins'), {
+  publicKey: marketConfig.publicKey, stop: closeView,
+  probe: async plugin => { if (plugin.backend) { await workers.start(plugin); await workers.stop(plugin.id); } },
+  forget: async plugin => {
+    for (const name of plugin.permissions.credentials ?? []) await credentials.clear(plugin.id, name);
+    await session.fromPartition('persist:commerce-' + plugin.id).clearStorageData();
+  },
+});
 await manager.initialize();
 window = new BrowserWindow({ title: '电商工具中心', width: 1380, height: 900, minWidth: 1000, minHeight: 680, webPreferences: { preload: path.join(root, 'desktop/preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

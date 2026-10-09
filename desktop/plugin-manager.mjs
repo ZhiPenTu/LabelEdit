@@ -45,8 +45,8 @@ export async function unpackPackage(bytes, destination) {
   return manifest;
 }
 export class PluginManager {
-  constructor(root, bundled, { publicKey, stop = async () => {}, probe = async () => {} } = {}) {
-    this.root = root; this.bundled = bundled; this.publicKey = publicKey; this.stop = stop; this.probe = probe;
+  constructor(root, bundled, { publicKey, stop = async () => {}, probe = async () => {}, forget = async () => {} } = {}) {
+    this.root = root; this.bundled = bundled; this.publicKey = publicKey; this.stop = stop; this.probe = probe; this.forget = forget;
     this.state = { plugins: {} }; this.defaults = new Map(); this.queue = Promise.resolve();
   }
   async initialize() {
@@ -104,7 +104,7 @@ export class PluginManager {
     try {if(enabled){const item=await this.get(id);if(item.missing.length)throw new Error('缺少服务依赖：'+item.missing.join('、'));await this.probe(item);}await this.persist();}
     catch(error){await this.stop(id);if(previous)this.state.plugins[id]=previous;else delete this.state.plugins[id];throw error;}
   }); }
-  async uninstall(id) { return this.transaction(async () => { await this.get(id); await this.stop(id); const row = this.state.plugins[id]; this.state.plugins[id] = { removed: true }; await this.persist(); await rm(path.join(this.root,'installed',id),{recursive:true,force:true,maxRetries:5,retryDelay:100}); }); }
+  async uninstall(id) { return this.transaction(async () => { const plugin = await this.get(id); await this.stop(id); await this.forget(plugin); this.state.plugins[id] = { removed: true }; await this.persist(); await rm(path.join(this.root,'installed',id),{recursive:true,force:true,maxRetries:5,retryDelay:100}); }); }
   async rollback(id) { return this.transaction(async () => { const row = this.state.plugins[id]; if (!row?.previous && !this.defaults.has(id)) throw new Error('没有可恢复的版本。'); await this.stop(id); if (row.previous) this.state.plugins[id] = row.previous; else delete this.state.plugins[id];
     try {const target=await this.get(id);if(target.missing.length)throw new Error('恢复版本缺少服务依赖。');if(target.enabled)await this.probe(target);await this.persist();}
     catch(error){await this.stop(id);this.state.plugins[id]=row;throw error;} }); }
