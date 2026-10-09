@@ -11,7 +11,13 @@ const directory=process.argv.find(arg=>arg.startsWith('--navigation-fixtures='))
 app.on('will-quit',()=>{if(process.exitCode)app.exit(process.exitCode);});
 app.on('child-process-gone',(_event,details)=>console.error('Child process gone:',details));
 const names=['navigation-web-one','navigation-web-two','navigation-native','navigation-web-three'];
-function runtimeAccess(stage) {if(process.platform==='win32')console.log('Runtime access:',stage,execFileSync('icacls',[process.execPath],{encoding:'utf8'}));}
+let originalAccess;
+function runtimeAccess(stage) {
+ if(process.platform!=='win32')return;
+ const access=execFileSync('icacls',[process.execPath],{encoding:'utf8'});
+ if(originalAccess===undefined)originalAccess=access;
+ assert.equal(access,originalAccess,'local plugins must not change the desktop executable ACL: '+stage);
+}
 async function check() {
 const deadline=Date.now()+30000;
 try {

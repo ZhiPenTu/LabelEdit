@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, readdir, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { confinedPath, TARGET } from './security.mjs';
 import { launchSandbox, RpcWorker, cleanupSandbox } from './sandbox.mjs';
@@ -24,18 +24,33 @@ export class Workers {
     const pending = this.launch(plugin); this.workers.set(key, pending);
     try { const worker = await pending; worker.child.once('close', () => { if (this.workers.get(key) === pending) this.workers.delete(key); }); return worker; } catch (e) { this.workers.delete(key); throw e; }
   }
+  async nodeExecutable() {
+    if (process.platform !== 'win32') return realpath(this.nodeRuntime);
+    if (!this.runtimeReady) this.runtimeReady = (async () => {
+      // AppContainer ACL grants must never modify the running desktop image or
+      // its DLLs: Chromium can reject new renderer processes while those grants
+      // are active. Copy only the immutable Node-mode runtime resources into a
+      // host-owned private cache, and grant access to that copy instead.
+      const source = await realpath(this.nodeRuntime), directory = path.dirname(source);
+      const cache = path.join(this.root, '.node-runtime');
+      await mkdir(cache, {recursive:true,mode:0o700});
+      const names = (await readdir(directory)).filter(name => name === path.basename(source) || /\.(dll|pak|dat|bin)$/i.test(name));
+      await Promise.all(names.map(name => copyFile(path.join(directory,name),path.join(cache,name))));
+      return realpath(path.join(cache,path.basename(source)));
+    })();
+    return this.runtimeReady;
+  }
   async launch(plugin) {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const cwd = await realpath(await mkdtemp(path.join(this.root, plugin.id + '-')));
     let worker;
     try {
       const entry = await confinedPath(plugin.folder, plugin.backend.entry[TARGET]);
-      const node = plugin.backend.type === 'node'; const executable = node ? this.nodeRuntime : entry;
+      const node = plugin.backend.type === 'node'; const executable = node ? await this.nodeExecutable() : entry;
       const readOnly = [await realpath(plugin.folder)]; if (node) {
-        const runtime = await realpath(this.nodeRuntime), dir = path.dirname(runtime);
-        readOnly.push(runtime);
+        const runtime = await realpath(executable), dir = path.dirname(runtime);
+        readOnly.push(process.platform === 'win32' ? dir : runtime);
         if (process.platform === 'darwin' && dir.endsWith('/Contents/MacOS')) readOnly.push(await realpath(path.join(dir, '../Frameworks')));
-        else if (process.platform === 'win32') { for (const name of await readdir(dir)) if (/\.(dll|pak|dat|bin)$/i.test(name)) readOnly.push(path.join(dir, name)); }
       }
       // Artifacts reject symlinks on install. Avoid Node's realpath walk through
       // ungranted drive ancestors in AppContainer without broadening its ACLs.
