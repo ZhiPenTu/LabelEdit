@@ -35,6 +35,8 @@ macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更
 
 发布证据：[v0.2.0 工作流](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37918154199) 的 macOS、Windows 打包和 publish 三个任务全部成功；公开 Release 包含 14 个文件，版本标签指向 `0d0c703`。后续市场目录独立维护，不修改已发布标签。
 
+发布后验证：从公开 Release 下载四个插件制品，SHA-256 和生产 Ed25519 签名全部匹配；默认线上目录与发布目录一致，两平台更新检查能读取真实 v0.2.0 日志。实际 macOS 打包应用完成线上市场加载、签名 AI 抠图插件安装、页面打开、最新版本检查和卸载，未出现页面异常，未调用 remove.bg API。公开 SDK 压缩包与独立安装、模板创建、校验和打包测试使用的制品逐字节一致。
+
 ## 旧代码清理
 
 已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 复用原图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。本地旧构建、旧版安装包、对比报告和临时目录也已清理。
