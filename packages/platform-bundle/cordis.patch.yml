@@ -1,0 +1,3 @@
+- insert:
+    - id: commerce-platform
+      name: '@commerce/platform-bundle/system'

@@ -1,0 +1,187 @@
+import { app, BrowserWindow, WebContentsView, dialog, ipcMain, protocol, session, utilityProcess, net } from 'electron';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { readFile, mkdir } from 'node:fs/promises';
+import { PluginManager, boundedDownload } from './plugin-manager.mjs';
+import { confinedPath } from './security.mjs';
+import { Workers } from './workers.mjs';
+import { FileBroker, NetworkBroker } from './brokers.mjs';
+import { Credentials } from './credentials.mjs';
+import updater from 'electron-updater';
+const { autoUpdater } = updater;
+import {latestReleaseNotes} from './updates.mjs';
+app.setName('Commerce Tools');
+const primary = app.requestSingleInstanceLock();
+const root = fileURLToPath(new URL('../', import.meta.url));
+protocol.registerSchemesAsPrivileged([{ scheme: 'commerce', privileges: { standard: true, secure: true, supportFetchAPI: true } }, { scheme: 'commerce-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+let window, manager, workers, files, credentials, network, host, quitting = false, hostReady;
+const views = new Map(), owners = new Map(), kernelRequests = new Map(); let kernelCounter = 0; let visible = null, systems = [], kernelError = null;
+const update = { status: 'idle', version: null, notes: '', error: null, progress: 0 };
+const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
+const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
+function changed() { if (window && !window.isDestroyed()) window.webContents.send('commerce:changed'); }
+function sanitizePlugin(p) { const { folder, backend, ...publicValue } = p; return { ...publicValue, local: Boolean(backend) }; }
+function assertFrame(event, shellOnly = false) {
+  if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) throw new Error('未授权的框架请求。');
+  if (shellOnly) { if (event.sender !== window?.webContents) throw new Error('未授权的平台请求。'); return; }
+  const id = owners.get(event.sender.id);
+  if (!id || new URL(event.senderFrame.url).hostname !== id) throw new Error('插件身份校验失败。');
+  return id;
+}
+function validateCall(method, args) { if (typeof method !== 'string' || method.length > 80 || (JSON.stringify(args) ?? '').length > 38_000_000) throw new Error('请求无效或过大。'); }
+function hideViews() { for (const v of views.values()) v.setVisible(false); visible = null; }
+async function closeView(id) {
+  const view = views.get(id); if (view) { views.delete(id); if (!view.webContents.isDestroyed()) { view.webContents.send('commerce:dispose'); owners.delete(view.webContents.id); if (window && !window.isDestroyed()) window.contentView.removeChildView(view); view.webContents.close(); } }
+  if (visible === id) visible = null; network?.stop(id); await files?.revoke(id); await workers?.stop(id);
+}
+async function servePlugin(request, id) {
+  try { const url = new URL(request.url); if (url.hostname !== id || url.protocol !== 'commerce-plugin:') return new Response('Forbidden', { status: 403 });
+    const plugin = await manager.get(id); if (!plugin.enabled) return new Response('Disabled', { status: 403 });
+    const image = url.pathname.match(/^\/api\/documents\/([a-f0-9]{32})\/pages\/(\d{1,2})\/image$/);
+    if (image && plugin.id === 'official.labeledit') { const value = await (await workers.start(plugin)).call('image', { id: image[1], page: Number(image[2]) }); return new Response(Buffer.from(value.data, 'base64'), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } }); }
+    const filename = await confinedPath(plugin.folder, decodeURIComponent(url.pathname.slice(1)));
+    const response = await net.fetch(pathToFileURL(filename).href);
+    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
+    return response;
+  } catch { return new Response('Not found', { status: 404 }); }
+}
+async function openView(id, settings = false) {
+  const plugin = await manager.get(id); if (!plugin.enabled || plugin.missing.length) throw new Error('插件已停用或缺少依赖。');
+  if (!views.has(id)) {
+    const ses = session.fromPartition('persist:commerce-' + id);
+    ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); ses.setPermissionCheckHandler(() => false);
+    if (!await ses.protocol.isProtocolHandled('commerce-plugin')) await ses.protocol.handle('commerce-plugin', request => servePlugin(request, id));
+    ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); callback({ cancel: !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id) }); });
+    const view = new WebContentsView({ webPreferences: { session: ses, preload: path.join(root, 'desktop/plugin-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, additionalArguments: ['--commerce-plugin=' + id] } });
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    view.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
+    view.webContents.on('will-attach-webview', event => event.preventDefault());
+    ses.on('will-download', async (event, item) => { if (!plugin.permissions.files) { event.preventDefault(); return; } item.pause(); try { const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch { item.cancel(); } });
+    window.contentView.addChildView(view); views.set(id, view); owners.set(view.webContents.id, id);
+    try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
+    catch (e) { await closeView(id); throw e; }
+  }
+  const destination = 'commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui);
+  if (views.get(id).webContents.getURL() !== destination) await views.get(id).webContents.loadURL(destination);
+  hideViews(); visible = id; views.get(id).setVisible(true); return sanitizePlugin(plugin);
+}
+function kernelRequest(message) {
+  if (!host || systems.length !== 7) return Promise.reject(new Error('Harness 内核不可用，请重新启动。'));
+  return new Promise((resolve,reject) => { const id = ++kernelCounter; const timer = setTimeout(() => { kernelRequests.delete(id); reject(new Error('内核请求超时。')); }, 30000); kernelRequests.set(id,{resolve,reject,timer}); host.postMessage({...message,id}); });
+}
+async function syncTools() { for(const p of await manager.list()) if (!p.enabled || p.missing.length) await closeView(p.id); return kernelRequest({type:'sync', plugins: (await manager.list()).map(({id,enabled,missing,services}) => ({id,enabled,missing,services}))}); }
+async function startKernel() {
+  kernelError = null; systems = []; const previousHost = host; host = null; previousHost?.kill();
+  for (const p of kernelRequests.values()) { clearTimeout(p.timer); p.reject(new Error('内核已重新启动。')); } kernelRequests.clear();
+  host = utilityProcess.fork(path.join(root, 'desktop/kernel-host.mjs'), [], { serviceName: 'Commerce Harness Kernel', stdio: 'pipe', env: { ...process.env, DSH_HOME: path.join(app.getPath('userData'), 'harness'), DSH_TELEMETRY_DISABLED: '1' } });
+  host.stderr?.on('data', data => console.error('[kernel]', data.toString().trim()));
+  const currentHost = host;
+  hostReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Harness 内核启动超时。')), 30000);
+    host.on('message', async message => {
+      if (currentHost !== host) return;
+      if (message.type === 'reply') { const p=kernelRequests.get(message.id); kernelRequests.delete(message.id); if(p) {clearTimeout(p.timer); if(message.error) p.reject(new Error(message.error)); else p.resolve(message.result);} }
+      else if (message.type === 'ready') { clearTimeout(timer); systems = message.systems; changed(); resolve(); }
+      else if (message.type === 'fatal') { clearTimeout(timer); kernelError = message.error; changed(); reject(new Error(message.error)); }
+      else if (message.type === 'invoke') { try { host.postMessage({ type: 'result', id: message.id, result: await systemInvoke(message.service, message.method, message.args) }); } catch (error) { host.postMessage({ type: 'result', id: message.id, error: error.message }); } }
+    });
+    host.once('exit', code => { if (currentHost !== host) return; for(const p of kernelRequests.values()) {clearTimeout(p.timer);p.reject(new Error('内核进程已退出。'));} kernelRequests.clear(); clearTimeout(timer); if (!quitting) { kernelError = 'Harness 内核已退出（' + code + '）。'; systems = []; void Promise.all([...views.keys()].map(closeView)).then(() => workers.stopAll()).finally(changed); changed(); reject(new Error(kernelError)); } });
+  });
+  host.postMessage({ type: 'init', options: { home: path.join(app.getPath('userData'), 'harness'), installAnchor: path.join(root, 'package.json') } });
+  await hostReady; await syncTools();
+}
+async function catalog() {
+  const config = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
+  if (!config.url || !config.publicKey) return { items: [], configured: false, message: '插件目录尚未发布。可以导入本地插件包。' };
+  const value = JSON.parse((await boundedDownload(config.url, 1024 * 1024)).toString());
+  if (value.schemaVersion !== 1 || !Array.isArray(value.plugins)) throw new Error('市场目录格式无效。');
+  return { items: value.plugins, configured: true };
+}
+async function systemInvoke(service, method, args = {}) {
+  if (service === 'home' && method === 'list') return (await manager.list()).map(sanitizePlugin);
+  if (service === 'tool' && method === 'call') {
+    const caller = await manager.get(args.caller), provider = await manager.get(args.provider);
+    if (!caller.enabled || caller.missing.length || !provider.enabled || provider.missing.length || !(provider.services?.provides ?? []).includes(args.service) || ![...(caller.services?.provides ?? []), ...(caller.services?.requires ?? [])].includes(args.service)) throw new Error('服务调用未授权。');
+    return (await workers.start(provider, caller.id)).call(args.method, args.args);
+  }
+  if (service === 'credentials' && ['set','status','clear'].includes(method)) {
+    const plugin = await manager.get(args.id); if (!plugin.enabled || !(plugin.permissions.credentials ?? []).includes(args.name)) throw new Error('凭据未授权。');
+    return credentials[method](args.id,args.name,args.value);
+  }
+  if (['plugins','market','updates'].includes(service) && method.startsWith(service + '.')) return performPlatform(method,args);
+  throw new Error('系统方法未注册。');
+}
+async function performPlatform(method, args) {
+  if (method === 'plugins.import') {
+    const result = await dialog.showOpenDialog(window, { title: '导入插件', properties: ['openFile'], filters: [{ name: '电商工具插件', extensions: ['ecplugin', 'zip'] }] }); if (result.canceled) return;
+    const confirm = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '安装'], defaultId: 0, title: '安装本地插件', message: '此插件的作者尚未经过市场签名验证。', detail: '插件将在隔离环境中运行，安装后可在插件管理中停用或卸载。' }); if (confirm.response !== 1) return;
+    await manager.install(await readFile(result.filePaths[0])); changed(); return;
+  }
+  if (method === 'plugins.enable') { await manager.setEnabled(args.id, args.enabled); changed(); return; }
+  if (method === 'plugins.uninstall') { await manager.uninstall(args.id); changed(); return; }
+  if (method === 'plugins.rollback') { await manager.rollback(args.id); changed(); return; }
+  if (method === 'market.list') return catalog();
+  if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); changed(); return; }
+  if (method === 'updates.check') { if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。'); await autoUpdater.checkForUpdates(); return; }
+  if (method === 'updates.download') { await autoUpdater.downloadUpdate(); return; }
+  if (method === 'updates.install') { autoUpdater.quitAndInstall(); return; }
+  throw new Error('平台操作不受支持。');
+}
+ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
+  assertFrame(event, true); validateCall(method, args);
+  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: (await manager.list()).map(sanitizePlugin), update, tabs: [...views.keys()] };
+  if (method === 'kernel.retry') { await startKernel(); return true; }
+  if (method === 'view.open') return openView(args.id, args.settings);
+  if (method === 'view.hide') { hideViews(); return; }
+  if (method === 'view.close') { await closeView(args.id); changed(); return; }
+  if (method === 'view.bounds') { const view = views.get(visible); if (view) { const {width,height} = window.getContentBounds(); if (['x','y','width','height'].every(k => Number.isFinite(args[k]) && args[k] >= 0) && args.x+args.width <= width+2 && args.y+args.height <= height+2) view.setBounds(Object.fromEntries(['x','y','width','height'].map(k => [k,Math.floor(args[k])]))); } return; }
+  const service = method.split('.')[0];
+  if (!['plugins','market','updates'].includes(service)) throw new Error('平台操作不受支持。');
+  const result = await kernelRequest({type:'call',kind:'system',service,method,args});
+  if (service === 'plugins' || method === 'market.install') await syncTools();
+  return result;
+});
+ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {
+  const id = assertFrame(event); validateCall(method, args); const plugin = await manager.get(id);
+  if (!plugin.enabled || plugin.missing.length || systems.length !== 7) throw new Error('插件或内核不可用。');
+  if (method === 'files.pick') return files.pick(plugin, args);
+  if (method === 'files.read') return files.read(plugin, args.token);
+  if (method === 'files.save') return files.save(plugin, args.token, args.filename);
+  if (method.startsWith('credentials.')) {
+    if (!(plugin.permissions.credentials ?? []).includes(args.name)) throw new Error('凭据未授权。');
+    return kernelRequest({type:'call',kind:'system',service:'credentials',method:method.slice(12),args:{...args,id}});
+  }
+  if (method === 'network.request') return network.call(plugin, args);
+  if (method === 'tasks.cancel') { network.cancel(id, args.id); await workers.stop(id); return; }
+  if (method === 'contributions.tool' || method === 'contributions.settings') { if (args.title !== plugin.title && args.title !== plugin.settings?.title) throw new Error('入口必须与已安装清单一致。'); return; }
+  if (method === 'services.call') {
+    if (!(plugin.services?.provides ?? []).includes(args.service) && !(plugin.services?.requires ?? []).includes(args.service)) throw new Error('服务未声明。');
+    return kernelRequest({type:'call',kind:'tool',service:args.service,method:args.method,args:args.args,caller:id});
+  }
+  throw new Error('插件接口不受支持。');
+});
+async function main() {
+await app.whenReady();
+await mkdir(app.getPath('userData'), { recursive: true });
+credentials = new Credentials(launcher); files = new FileBroker(path.join(app.getPath('userData'), 'files'), dialog); network = new NetworkBroker(files, credentials);
+workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
+await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
+const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
+manager = new PluginManager(path.join(app.getPath('userData'), 'plugins'), path.join(generated, 'plugins'), { publicKey: marketConfig.publicKey, stop: closeView, probe: async plugin => { if (plugin.backend) { await workers.start(plugin); await workers.stop(plugin.id); } } });
+await manager.initialize();
+window = new BrowserWindow({ title: '电商工具中心', width: 1380, height: 900, minWidth: 1000, minHeight: 680, webPreferences: { preload: path.join(root, 'desktop/preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce://shell/') && !(process.env.COMMERCE_DEV_URL && url.startsWith(process.env.COMMERCE_DEV_URL + '/'))) event.preventDefault(); });
+protocol.handle('commerce', async request => { try { const url = new URL(request.url); if (url.hostname !== 'shell') return new Response('Forbidden', { status: 403 }); return net.fetch(pathToFileURL(await confinedPath(path.join(root, 'dist'), decodeURIComponent(url.pathname.slice(1)))).href); } catch { return new Response('Not found', { status: 404 }); } });
+await window.loadURL(process.env.COMMERCE_DEV_URL || 'commerce://shell/index.html');
+void startKernel().catch(error => { kernelError = error.message; changed(); });
+autoUpdater.autoDownload = false; autoUpdater.fullChangelog = false;
+for (const [event, status] of [['checking-for-update', 'checking'], ['update-not-available', 'current'], ['update-available', 'available'], ['update-downloaded', 'downloaded']]) autoUpdater.on(event, info => { update.status = status; update.error = null; if (info?.version) update.version = info.version; if (info?.releaseNotes) update.notes = latestReleaseNotes(info); changed(); });
+autoUpdater.on('download-progress', progress => { update.status = 'downloading'; update.progress = progress.percent; changed(); });
+autoUpdater.on('error', error => { update.status = 'error'; update.error = error.message; changed(); });
+app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; void Promise.all([...views.keys()].map(closeView)).then(() => workers.stopAll()).finally(() => { host?.postMessage({ type: 'shutdown' }); setTimeout(() => { host?.kill(); app.quit(); }, 300); }); });
+app.on('window-all-closed', () => app.quit());
+
+}
+if (!primary) app.quit();
+else void main().catch(error => { console.error(error); app.quit(); });

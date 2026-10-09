@@ -21,3 +21,8 @@ src-tauri/resources/backend/*
 !src-tauri/resources/backend/.gitkeep
 dist-backend/
 build/
+native/sandbox/target/
+release/
+.commerce-dev/
+resources/generated/
+*.ecplugin

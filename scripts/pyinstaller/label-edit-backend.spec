@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 project_root = Path.cwd().resolve()
@@ -59,7 +60,7 @@ for pkg in ["uvicorn", "fastapi", "starlette", "rapidocr", "reportlab"]:
         pass
 
 a = Analysis(
-    [str(project_root / "backend" / "desktop_entry.py")],
+    [str(project_root / "backend" / ("rpc_entry.py" if os.environ.get("COMMERCE_BACKEND_RPC") == "1" else "desktop_entry.py"))],
     pathex=[str(project_root)],
     binaries=binaries,
     datas=datas,

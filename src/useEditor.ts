@@ -17,6 +17,8 @@ export function useEditor() {
     dispatch(action);
   }, []);
   const { request: previewFor, invalidate: invalidatePreview } = usePreviewResources(state.previewUrl);
+  const nativeDownload = useRef<string | null>(null);
+  useEffect(() => () => { if (nativeDownload.current) { URL.revokeObjectURL(nativeDownload.current); nativeDownload.current = null; } }, [state.document?.id]);
   const openGeneration = useRef(0);
   const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMove = useRef<PendingMove | null>(null);
@@ -201,9 +203,11 @@ export function useEditor() {
     const generation = openGeneration.current;
     send({ type: 'patch', patch: { operation: 'exporting', error: null, notice: null, download: null } });
     try {
-      await api.export(before.document.id, before.edits);
+      const exported = await api.export(before.document.id, before.edits);
       if (!isCurrent(before.document.id, generation)) return;
-      const url = api.downloadUrl(before.document.id);
+      if (nativeDownload.current) URL.revokeObjectURL(nativeDownload.current);
+      const url = window.commercePlugin ? URL.createObjectURL(exported) : api.downloadUrl(before.document.id);
+      nativeDownload.current = window.commercePlugin ? url : null;
       const filename = before.document.filename.replace(/\.pdf$/i, '') + ' - 已编辑.pdf';
       send({ type: 'patch', patch: { download: { url, filename }, notice: 'PDF 已生成。若下载未开始，可点击下方链接。' } });
       const anchor = window.document.createElement('a');

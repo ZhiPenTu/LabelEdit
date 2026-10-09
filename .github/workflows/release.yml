@@ -1,9 +1,9 @@
-name: Release Desktop App
+name: Release legacy LabelEdit (Tauri)
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v0.1.*'
   workflow_dispatch:
 
 jobs:

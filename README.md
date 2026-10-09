@@ -1,72 +1,22 @@
-# LabelEdit
+# 电商工具中心 / LabelEdit
 
-本地 PDF 标签文字编辑器。面向图片型/扫描型 PDF 的日期、批次、名称、地址等修改，也能读取真实 PDF 文字层。使用实际 PDF 预览，支持 OCR 文字点选、手动框选、人工校正、字体/字号/颜色、多页编辑、撤销、导出。
+Electron + DeepSeek Harness 的电商插件服务统一入口。工具中心、市场、插件管理、设置与更新使用自有界面；LabelEdit 默认附带，保留离线 PDF/OCR 编辑。AI 抠图作为独立插件，通过用户自己的 remove.bg API 密钥提供服务。
 
-支持以 **网页端** 或 **跨平台桌面端（macOS / Windows）** 运行，完全内置离线 OCR 识别引擎与 PDFium 渲染库，支持 GitHub Releases 自动检测与静默升级。
+当前 v0.2.0 为开发目标，正式签名与发布验收尚未完成。已发布的 [LabelEdit v0.1.5](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.1.5) 继续保留；旧用户需手动安装新底座。
 
----
+- [最终目标任务书](docs/commerce-plugin-platform-taskbook.md)
+- [实现状态和验收证据](docs/implementation-status.md)
+- [开发、测试与发布](docs/release-guide.md)
+- [插件 SDK 与开发模板](docs/plugin-development.md)
+- [第三方声明](docs/third-party-notices.md)
 
-## 桌面端开发与运行
+底座使用官方 `@deepseek-ai/dsh@0.2.1-alpha.1` 发布包与自定义 commerce-desktop Profile，不加载上游默认 Web 产品界面。插件制品、生命周期和系统权限隔离分别处理；macOS 使用 Seatbelt，Windows 使用 AppContainer + Job Object，无不安全降级。
 
-桌面端基于 **Tauri v2 + Python 独立后端进程 + React 19** 构建。
+## 运行
 
-### 1. 开发模式启动
+按发布指南准备 RPC 后端、沙箱和插件资源，然后 `npm run desktop:start`。`npm run plugin -- create my-tool` 可创建插件，打包导入即可使用，无需重新发布底座。市场首版仅提供目录与安装，不包含账号、支付或开发者自助发布。
 
-需要 Node.js 22+（推荐 24）、Python 3.12 及 Rust 工具链。
-
-```bash
-# 启动 Tauri 桌面端开发环境（自动拉起内置 Python 后端与 Vite 前端窗口）
-npm run tauri:dev
-# 或直接运行：
-bash scripts/tauri-dev.sh
-```
-
-### 2. 本地一键打包
-
-#### macOS (.dmg / .app)
-在 macOS 环境下执行：
-```bash
-# 一键编译独立 Python 后端、Vite 前端并生成 macOS DMG 安装包
-npm run build:desktop
-# 或直接运行：
-bash scripts/build-desktop-macos.sh
-```
-构建成功后，安装包生成于 `src-tauri/target/release/bundle/dmg/`。
-
-#### Windows (.exe / NSIS 安装向导)
-在 Windows 环境下打开 CMD 或 PowerShell 执行：
-```bat
-scripts\build-desktop-windows.bat
-```
-构建成功后，安装包生成于 `src-tauri\target\release\bundle\nsis\`。
-
-### 3. GitHub Actions CI 跨平台自动化发布与更新
-
-项目已配置 `.github/workflows/release.yml` 自动化发布管线：
-1. 本地生成或指定版本 tag：`git tag v0.1.0 && git push origin v0.1.0`。
-2. GitHub CI 自动并行启动 `macos-latest` 与 `windows-latest` 虚拟机，编译独立离线后端、前端和桌面端壳。
-3. 自动生成并签署更新清单 `latest.json`，并将 macOS `.dmg`、`.app.tar.gz` 和 Windows NSIS `.exe` 发布到 GitHub Releases。
-4. 运行中的桌面端启动时将在后台静默检测，有新版本时弹出更新提示，展示该版本的变更日志，并支持一键下载、安装与重启。
-
-每次发布前，将 `RELEASE_NOTES.md` 替换为最新版本的更新说明（支持 Markdown 标题、列表和重点文字）。发布流程会将同一份内容写入 GitHub Release 和 `latest.json` 的 `notes` 字段。客户端只展示检测到的最新版本说明；此文件也只维护最新一版的内容。
-
-*注：GitHub 仓库需在 Settings -> Secrets and variables -> Actions 中配置 `TAURI_SIGNING_PRIVATE_KEY`（对应 `src-tauri/updater.key` 内容）以启用更新包数字签名。*
-
----
-
-## 网页端模式启动
-
-也可以作为纯浏览器服务启动：
-
-```bash
-bash scripts/setup-backend.sh
-npm ci
-bash scripts/dev.sh
-```
-
-打开 <http://127.0.0.1:5188>。后端监听 `127.0.0.1:8765`。
-
----
+旧 Tauri 的开发脚本仍保留，`npm run tauri:dev` 可运行旧编辑器；旧发布工作流仅处理 `v0.1.*`。新底座采用独立 Electron 更新制品并保留兼容旧版的更新清单。
 
 ## 使用说明
 

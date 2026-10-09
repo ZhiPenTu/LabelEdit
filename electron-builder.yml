@@ -1,0 +1,36 @@
+appId: com.commerce.tools.desktop
+productName: Commerce Tools
+artifactName: CommerceTools-${version}-${os}-${arch}.${ext}
+directories:
+  output: release/desktop
+files:
+  - dist/**/*
+  - desktop/**/*
+  - packages/platform-bundle/**/*
+  - packages/plugin-sdk/**/*
+  - package.json
+afterPack: desktop/after-pack.cjs
+npmRebuild: false
+asarUnpack:
+  - node_modules/**/*.node
+extraResources:
+  - from: resources/generated
+    to: commerce
+mac:
+  target: [dmg, zip]
+  minimumSystemVersion: '13.0'
+  hardenedRuntime: true
+  notarize: true
+  entitlements: desktop/entitlements.mac.plist
+win:
+  target: [nsis]
+  verifyUpdateCodeSignature: true
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: ZhiPenTu
+  repo: LabelEdit
+  releaseType: release

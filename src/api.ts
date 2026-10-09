@@ -26,15 +26,19 @@ const jsonOptions = (body: unknown): RequestInit => ({
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
 const documentPath = (id: string) => `/api/documents/${encodeURIComponent(id)}`;
+const native = <T>(method: string, args?: unknown) => window.commercePlugin!.invoke<T>('services.call', { service: 'labeledit.pdf', method, args });
+function nativeBlob(value: { data: string; mime: string }) { const binary = atob(value.data); const bytes = Uint8Array.from(binary, char => char.charCodeAt(0)); return new Blob([bytes], { type: value.mime }); }
 
 export const api = {
   async upload(file: File): Promise<PDFDocument> {
+    if (window.commercePlugin) { const bytes = new Uint8Array(await file.arrayBuffer()); if (bytes.length > 25 * 1024 * 1024) throw new Error('PDF 文件不能超过 25 MB。'); let binary = ''; for (let i = 0; i < bytes.length; i += 65536) binary += String.fromCharCode(...bytes.subarray(i, i + 65536)); return api.fixDocumentUrls(await native<PDFDocument>('upload', { filename: file.name, data: btoa(binary) })); }
     const form = new FormData();
     form.append('file', file);
     const doc = await jsonRequest<PDFDocument>('/api/documents', { method: 'POST', body: form });
     return api.fixDocumentUrls(doc);
   },
   async demo(): Promise<PDFDocument> {
+    if (window.commercePlugin) return api.fixDocumentUrls(await native<PDFDocument>('demo'));
     const doc = await jsonRequest<PDFDocument>('/api/demo', { method: 'POST' });
     return api.fixDocumentUrls(doc);
   },
@@ -49,16 +53,19 @@ export const api = {
     };
   },
   async close(id: string): Promise<void> {
+    if (window.commercePlugin) { await native('close', { id }); return; }
     const base = await getApiBase();
     await checked(await fetch(`${base}${documentPath(id)}`, { method: 'DELETE' }));
   },
-  recognize: (id: string, page: number, language: Language) =>
+  recognize: (id: string, page: number, language: Language) => window.commercePlugin ? native<Recognition>('recognize', { id, page, language }) :
     jsonRequest<Recognition>(`${documentPath(id)}/pages/${page}/recognize`, jsonOptions({ language })),
   async preview(id: string, page: number, edits: TextEdit[]): Promise<Blob> {
+    if (window.commercePlugin) return nativeBlob(await native('preview', { id, page, edits }));
     const base = await getApiBase();
     return (await checked(await fetch(`${base}${documentPath(id)}/preview`, jsonOptions({ page, edits })))).blob();
   },
   async export(id: string, edits: TextEdit[]): Promise<Blob> {
+    if (window.commercePlugin) return nativeBlob(await native('export', { id, edits }));
     const base = await getApiBase();
     return (await checked(await fetch(`${base}${documentPath(id)}/export`, jsonOptions({ edits })))).blob();
   },

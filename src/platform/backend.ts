@@ -42,6 +42,7 @@ export const DEFAULT_SYSTEM_INFO: SystemInfo = {
 };
 
 export async function getApiBase(): Promise<string> {
+  if (window.commercePlugin) return 'commerce-plugin://' + window.commercePlugin.id;
   if (cachedBaseUrl !== null) return cachedBaseUrl;
   if (isTauri()) {
     pendingBase ??= invoke<string>("get_backend_url").then(url => {
@@ -55,6 +56,7 @@ export async function getApiBase(): Promise<string> {
 }
 
 export function getSyncApiBase(): string {
+  if (window.commercePlugin) return 'commerce-plugin://' + window.commercePlugin.id;
   if (cachedBaseUrl !== null) return cachedBaseUrl;
   if (isTauri()) return "http://127.0.0.1:8765";
   return "";
@@ -62,6 +64,7 @@ export function getSyncApiBase(): string {
 
 export async function checkBackendHealth(): Promise<{ ready: boolean; error?: string }> {
   try {
+    if (window.commercePlugin) return await window.commercePlugin.invoke('services.call', { service: 'labeledit.pdf', method: 'health' });
     const base = await getApiBase();
     const res = await fetch(`${base}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
     if (!res.ok) return { ready: false, error: `服务状态异常（${res.status}）` };
@@ -74,6 +77,7 @@ export async function checkBackendHealth(): Promise<{ ready: boolean; error?: st
 
 export async function getBackendSystemInfo(): Promise<SystemInfo> {
   try {
+    if (window.commercePlugin) return await window.commercePlugin.invoke('services.call', { service: 'labeledit.pdf', method: 'health' });
     const base = await getApiBase();
     const res = await fetch(`${base}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
     if (!res.ok) return DEFAULT_SYSTEM_INFO;
