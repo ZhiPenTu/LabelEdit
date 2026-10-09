@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { UpdateService, nativeUpdateAdapter } from '../../desktop/update-service.mjs';
 
-const available = { status: 'available', version: '0.3.0', notes: 'latest' };
+const available = { status: 'available', version: '0.2.4', notes: 'latest' };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 
 test('download returns immediately, prevents overlapping operations, and automatically installs after preparation', async () => {
@@ -36,14 +36,14 @@ test('failed downloads never install, retain the checked version for retry and r
   }, () => {});
   service.check(); await service.pending;
   service.download(); await service.pending;
-  assert.equal(installs, 0); assert.equal(service.state.status, 'error'); assert.equal(service.state.version, '0.3.0');
+  assert.equal(installs, 0); assert.equal(service.state.status, 'error'); assert.equal(service.state.version, '0.2.4');
   service.download(); await service.pending;
   assert.equal(installs, 1); assert.equal(service.state.error, null);
 });
 
 test('native updates verify/download before silent install with forced relaunch, and remove progress subscriptions', async () => {
   const updater = new EventEmitter(), calls = [], states = [];
-  updater.checkForUpdates = async () => ({ isUpdateAvailable: true, updateInfo: { version: '0.3.0', releaseNotes: 'latest' } });
+  updater.checkForUpdates = async () => ({ isUpdateAvailable: true, updateInfo: { version: '0.2.4', releaseNotes: 'latest' } });
   updater.downloadUpdate = async () => { calls.push('download'); updater.emit('download-progress', { percent: 50, transferred: 5, total: 10 }); };
   updater.quitAndInstall = (...args) => calls.push(args);
   const adapter = nativeUpdateAdapter(updater);
@@ -53,6 +53,7 @@ test('native updates verify/download before silent install with forced relaunch,
   assert.deepEqual(calls, ['download', [true, true]]);
   assert.equal(states[0].progress, 50); assert.equal(updater.listenerCount('download-progress'), 0);
   assert.equal(updater.autoDownload, false); assert.equal(updater.autoInstallOnAppQuit, false);
+  assert.equal(updater.disableDifferentialDownload, false);
   updater.downloadUpdate = async () => { throw new Error('checksum mismatch'); };
   await assert.rejects(adapter.download(available, () => {}), /checksum/);
   assert.equal(updater.listenerCount('download-progress'), 0);

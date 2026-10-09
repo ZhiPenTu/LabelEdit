@@ -9,6 +9,8 @@ const ReleaseNotes = lazy(() => import('@/components/ReleaseNotes'));
 export interface UpdateState {
   status: string; version: string | null; notes: string; error: string | null;
   progress: number; transferred: number; total: number;
+  mode?: 'full' | 'resume' | 'delta' | 'cached' | 'components' | null;
+  reusedBytes?: number; fallbackReason?: string | null;
 }
 const megabytes = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 
@@ -19,6 +21,7 @@ export function UpdateCard({ version, update, disabled, onAction }: {
   const downloading = update.status === 'downloading';
   const preparing = update.status === 'extracting' || update.status === 'installing';
   const retry = update.status === 'error' && Boolean(update.version);
+  const downloadLabel = update.mode ? { full: '正在下载完整更新', resume: '正在继续下载更新', delta: '正在下载差量更新', cached: '正在校验已缓存的更新', components: '正在下载所需组件' }[update.mode] : '正在下载更新';
   return <Card className="updates-card">
     <CardHeader><span className="update-icon"><RefreshCw /></span><CardTitle role="heading" aria-level={2}>轻作更新</CardTitle><CardDescription>当前版本 v{version}</CardDescription></CardHeader>
     <CardContent className="flex flex-col gap-4">
@@ -26,11 +29,13 @@ export function UpdateCard({ version, update, disabled, onAction }: {
         <p className="text-sm text-muted-foreground">下载完成后将自动安装并重启，请先保存正在编辑的文件。</p></div>
       {downloading || preparing ? <div className="flex flex-col gap-2" aria-busy="true">
         <Progress value={downloading ? update.progress : null}>
-          <ProgressLabel>{downloading ? '正在下载更新' : update.status === 'extracting' ? '正在解压并校验更新…' : '正在安装，即将重启…'}</ProgressLabel>
+          <ProgressLabel>{downloading ? downloadLabel : update.status === 'extracting' ? '正在解压并校验更新…' : '正在安装，即将重启…'}</ProgressLabel>
           {downloading ? <ProgressValue>{() => `${Math.floor(update.progress)}%`}</ProgressValue> : null}
         </Progress>
         {downloading ? <p className="text-sm text-muted-foreground">{megabytes(update.transferred)}{update.total > 0 ? ` / ${megabytes(update.total)}` : ''}</p> : null}
+        {(update.reusedBytes || 0) > 0 ? <p className="text-sm text-muted-foreground">已复用 {megabytes(update.reusedBytes || 0)} 的本地文件</p> : null}
       </div> : null}
+      {update.fallbackReason ? <p role="status" className="text-sm text-muted-foreground">{update.fallbackReason}</p> : null}
       {update.error ? <Alert variant="destructive"><AlertCircle /><AlertDescription>{update.error}</AlertDescription></Alert> : null}
       {update.notes ? <Suspense fallback={<span>加载更新说明…</span>}><ReleaseNotes body={update.notes} /></Suspense> : null}
     </CardContent>

@@ -83,10 +83,12 @@ jobs:
           node scripts/package-desktop.mjs --dir
           if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Qingzuo.app"; fi
           node scripts/test-packaged-desktop.mjs
+          if [[ "$RUNNER_OS" == "macOS" ]]; then node scripts/test-component-update.mjs; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Commerce-validation-${{ runner.os }}
           path: |
             output/electron-tests/
+            output/update-validation/
             release/desktop/

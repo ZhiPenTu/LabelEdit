@@ -1,63 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, mkdir, writeFile, access } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import os from 'node:os';
-import { applicationBundle, downloadRelease, prepareMacUpdate, launchMacInstaller, previousUpdateError } from '../../desktop/mac-update.mjs';
+import { applicationBundle, prepareMacUpdate, launchMacInstaller, previousUpdateError } from '../../desktop/mac-update.mjs';
 const execute = promisify(execFile);
-const bytes = Buffer.from('trusted-update-archive');
-const artifact = { url: 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.3.0/CommerceTools-0.3.0-mac-arm64.zip', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
-
-test('streamed downloads report bytes, verify checksums, and remove partial or corrupt files for retry', async () => {
-  const folder = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-download-'));
-  const filename = path.join(folder, 'update.zip');
-  try {
-    for (const [payload, fetchImpl] of [
-      [artifact, async () => new Response('bad update')],
-      [{ ...artifact, sha256: '0'.repeat(64) }, async () => new Response(bytes)],
-      [artifact, async () => new Response(Buffer.alloc(bytes.length + 1))],
-      [artifact, async () => new Response(bytes, { headers: { 'content-length': '4' } })],
-      [artifact, async () => new Response('', { status: 503 })],
-      [artifact, async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(bytes.subarray(0, 4)); controller.error(new Error('connection lost')); } }))],
-    ]) {
-      await assert.rejects(downloadRelease(payload, filename, () => {}, { fetchImpl }));
-      await assert.rejects(access(filename));
-    }
-    const states = [];
-    await downloadRelease(artifact, filename, state => states.push(state), { fetchImpl: async () => new Response(bytes) });
-    assert.deepEqual(await readFile(filename), bytes);
-    assert.equal(states.at(-1).progress, 100); assert.equal(states.at(-1).transferred, bytes.length);
-    await assert.rejects(downloadRelease({ ...artifact, url: 'https://untrusted.example/update.zip' }, filename, () => {}), /无效/);
-    assert.deepEqual(await readFile(filename), bytes);
-  } finally { await rm(folder, { recursive: true, force: true }); }
-});
-
 test('update targets reject disk images, translocated applications and development executables', { skip: process.platform !== 'darwin' }, () => {
   assert.equal(applicationBundle('/Applications/Commerce Tools.app/Contents/MacOS/Commerce Tools'), '/Applications/Commerce Tools.app');
   for (const filename of ['/Volumes/Qingzuo/Qingzuo.app/Contents/MacOS/Qingzuo', '/private/var/AppTranslocation/random/Qingzuo.app/Contents/MacOS/Qingzuo', '/usr/bin/node']) assert.throws(() => applicationBundle(filename));
 });
 
-test('quitting during a download aborts the stream and removes the partial archive', async () => {
-  const folder = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-cancel-'));
-  try {
-    const controller = new AbortController();
-    const filename = path.join(folder, 'update.zip');
-    await assert.rejects(downloadRelease(artifact, filename, () => controller.abort(new Error('cancelled')), {
-      signal: controller.signal,
-      fetchImpl: async () => new Response(new ReadableStream({ start(stream) { stream.enqueue(bytes.subarray(0, 2)); } })),
-    }), /cancelled/);
-    await assert.rejects(access(filename));
-  } finally { await rm(folder, { recursive: true, force: true }); }
-});
-
 async function makeBundle(folder, name, id = 'com.commerce.tools.desktop') {
   const app = path.join(folder, `${name}.app`);
   await mkdir(path.join(app, 'Contents/MacOS'), { recursive: true });
-  await writeFile(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${id}</string><key>CFBundleExecutable</key><string>fixture</string><key>CFBundleShortVersionString</key><string>0.3.0</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`);
+  await writeFile(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${id}</string><key>CFBundleExecutable</key><string>fixture</string><key>CFBundleShortVersionString</key><string>0.2.4</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`);
   const source = path.join(folder, `${name}.c`);
   // LaunchServices invokes a harmless fixture that records its actual launch.
   await writeFile(source, '#include <stdio.h>\n#include <mach-o/dyld.h>\nint main(void) { char p[4096]; uint32_t n=sizeof(p); _NSGetExecutablePath(p,&n); char f[4200]; snprintf(f,sizeof(f),"%s.started",p); FILE *o=fopen(f,"w"); if(o){fputs("started",o);fclose(o);} return 0; }');
@@ -74,14 +33,14 @@ test('macOS extracts real ZIPs and rejects mismatched versions, bundle identitie
     const archive = path.join(folder, 'update.zip');
     await execute('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, archive]);
     const staging = await mkdtemp(path.join(folder, 'stage-'));
-    assert.ok((await prepareMacUpdate(archive, staging, '0.3.0')).endsWith('Qingzuo.app'));
-    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.4.0'), /版本不匹配/);
+    assert.ok((await prepareMacUpdate(archive, staging, '0.2.4')).endsWith('Qingzuo.app'));
+    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.2.5'), /版本不匹配/);
     await writeFile(path.join(app, 'Contents/MacOS/fixture'), 'broken binary');
     await execute('/usr/bin/ditto', ['-c', '-k', '--keepParent', app, archive]);
-    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.3.0'));
+    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.2.4'));
     const other = await makeBundle(folder, 'Other', 'test.other');
     await execute('/usr/bin/ditto', ['-c', '-k', '--keepParent', other, archive]);
-    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.3.0'));
+    await assert.rejects(prepareMacUpdate(archive, await mkdtemp(path.join(folder, 'stage-')), '0.2.4'));
   } finally { await rm(folder, { recursive: true, force: true }); }
 });
 

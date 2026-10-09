@@ -41,9 +41,16 @@ export async function checkGitHubRelease(currentVersion, { fetchImpl = globalThi
   const asset = Array.isArray(release.assets) ? release.assets.find(asset => asset?.name === filename && asset.state === 'uploaded') : null;
   if (!asset) throw new Error('最新版本尚未提供当前系统的安装包。');
   if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest) || !Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > 2 * 1024 ** 3) throw new Error('安装包缺少有效的完整性校验信息。');
+  const blockmap = release.assets.find(item => item?.name === filename + '.blockmap' && item.state === 'uploaded');
+  const blockmapInfo = blockmap && /^sha256:[a-f0-9]{64}$/.test(blockmap.digest) && Number.isSafeInteger(blockmap.size) && blockmap.size > 0 && blockmap.size <= 16 * 1024 ** 2
+    ? { url: `${releaseRepository}/releases/download/v${version}/${filename}.blockmap`, size: blockmap.size, sha256: blockmap.digest.slice(7) } : null;
+  const manifestName = `CommerceTools-${version}-mac-arm64.components.json`;
+  const manifest = platform === 'darwin' ? release.assets.find(item => item?.name === manifestName && item.state === 'uploaded') : null;
+  const components = manifest && /^sha256:[a-f0-9]{64}$/.test(manifest.digest) && Number.isSafeInteger(manifest.size) && manifest.size > 0 && manifest.size <= 16 * 1024 ** 2
+    ? { url: `${releaseRepository}/releases/download/v${version}/${manifestName}`, size: manifest.size, sha256: manifest.digest.slice(7) } : null;
   return { status: 'available', version, notes: typeof release.body === 'string' ? release.body : '', artifact: {
-    url: `${releaseRepository}/releases/download/v${version}/${filename}`, size: asset.size, sha256: asset.digest.slice(7),
-  } };
+    url: `${releaseRepository}/releases/download/v${version}/${filename}`, size: asset.size, sha256: asset.digest.slice(7), ...(blockmapInfo ? { blockmap: blockmapInfo } : {}),
+  }, ...(components ? { components } : {}) };
 }
 
 export function latestReleaseNotes(info) {

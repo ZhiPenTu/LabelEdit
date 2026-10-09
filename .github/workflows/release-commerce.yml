@@ -90,6 +90,12 @@ jobs:
         run: node scripts/verify-signatures.mjs
       - name: Build independently signed plugin artifacts
         run: node scripts/market-artifacts.mjs
+      - name: Build signed macOS update components
+        if: runner.os == 'macOS'
+        run: node scripts/component-artifacts.mjs
+      - name: Verify reconstructed macOS application offline
+        if: runner.os == 'macOS'
+        run: node scripts/test-component-update.mjs --release-artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: Commerce-${{ runner.os }}
@@ -100,6 +106,7 @@ jobs:
             release/desktop/*.blockmap
             release/desktop/latest*.yml
             release/market/*
+            release/components/*
   publish:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     needs: package
@@ -125,4 +132,4 @@ jobs:
       - name: Publish validated release
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" release/desktop/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+          gh release create "$GITHUB_REF_NAME" release/desktop/* release/components/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"

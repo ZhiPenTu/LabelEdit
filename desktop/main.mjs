@@ -236,7 +236,7 @@ const distribution = JSON.parse(await readFile(path.join(generated, 'distributio
 const signed = desktopSigningMode({ COMMERCE_DESKTOP_SIGNING: distribution.signing }) === 'signed';
 const receipt = path.join(app.getPath('userData'), 'update-error.txt');
 const adapter = process.platform === 'darwin' && !signed
-  ? macUpdateAdapter({ app, beforeInstall: shutdownRuntime, receipt })
+  ? macUpdateAdapter({ app, beforeInstall: shutdownRuntime, receipt, publicKey: marketConfig.publicKey })
   : nativeUpdateAdapter(autoUpdater);
 updateService = new UpdateService(adapter, changed);
 autoUpdater.on('error', error => updateService.fail(error));

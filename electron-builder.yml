@@ -13,7 +13,7 @@ afterPack: desktop/after-pack.cjs
 forceCodeSigning: false
 npmRebuild: false
 asarUnpack:
-  - node_modules/**/*.node
+  - node_modules/**/*
 extraResources:
   - from: resources/generated
     to: commerce

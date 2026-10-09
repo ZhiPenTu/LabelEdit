@@ -1,50 +1,13 @@
-import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { checkGitHubRelease } from './updates.mjs';
+import { downloadUpdateArchive } from './update-download.mjs';
+import { prepareComponentUpdate } from './update-components.mjs';
 
 const execute = promisify(execFile);
 const bundleID = 'com.commerce.tools.desktop';
-
-export async function downloadRelease(artifact, destination, notify, { fetchImpl = globalThis.fetch, signal } = {}) {
-  if (!/^https:\/\/github\.com\/ZhiPenTu\/LabelEdit\/releases\/download\/v\d+\.\d+\.\d+\/CommerceTools-\d+\.\d+\.\d+-mac-arm64\.zip$/.test(artifact.url)
-      || !/^[a-f0-9]{64}$/.test(artifact.sha256) || !Number.isSafeInteger(artifact.size) || artifact.size <= 0 || artifact.size > 2 * 1024 ** 3) throw new Error('更新下载信息无效。');
-  const controller = new AbortController();
-  const downloadSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-  let response;
-  let idle;
-  const touch = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(new Error('下载超时，请重试。')), 60_000); };
-  const deadline = setTimeout(() => controller.abort(new Error('下载超时，请重试。')), 30 * 60_000);
-  const digest = createHash('sha256');
-  let transferred = 0, lastNotification = 0;
-  try {
-    touch();
-    response = await fetchImpl(artifact.url, { signal: downloadSignal });
-    if (!response.ok || !response.body) throw new Error(`更新下载失败（HTTP ${response.status}），请重试。`);
-    const total = Number(response.headers.get('content-length'));
-    if (total && total !== artifact.size) throw new Error('安装包大小与发布信息不一致。');
-    const meter = new Transform({ transform(chunk, _encoding, callback) {
-      touch(); transferred += chunk.length;
-      if (transferred > artifact.size) { callback(new Error('安装包超过预期大小。')); return; }
-      digest.update(chunk);
-      if (Date.now() - lastNotification >= 150 || transferred === artifact.size) {
-        lastNotification = Date.now();
-        notify({ status: 'downloading', progress: transferred / artifact.size * 100, transferred, total: artifact.size });
-      }
-      callback(null, chunk);
-    } });
-    await pipeline(Readable.fromWeb(response.body), meter, createWriteStream(destination, { flags: 'wx', mode: 0o600 }), { signal: downloadSignal });
-    if (transferred !== artifact.size || digest.digest('hex') !== artifact.sha256) throw new Error('安装包完整性校验失败，请重新下载。');
-  } catch (error) {
-    await rm(destination, { force: true });
-    throw downloadSignal.aborted ? downloadSignal.reason : error;
-  } finally { clearTimeout(idle); clearTimeout(deadline); await response?.body?.cancel().catch(() => {}); }
-}
 
 export function applicationBundle(executable) {
   const app = path.resolve(executable, '../../..');
@@ -65,6 +28,10 @@ export async function prepareMacUpdate(archive, staging, version, signal) {
   const bundles = entries.filter(entry => entry.isDirectory() && entry.name.endsWith('.app'));
   if (bundles.length !== 1) throw new Error('更新包必须包含一个应用。');
   const bundle = path.join(extracted, bundles[0].name);
+  return verifyMacBundle(bundle, version, signal);
+}
+
+export async function verifyMacBundle(bundle, version, signal) {
   if (await plist(bundle, 'CFBundleIdentifier') !== bundleID || await plist(bundle, 'CFBundleShortVersionString') !== version) throw new Error('更新包的应用标识或版本不匹配。');
   const executable = await plist(bundle, 'CFBundleExecutable');
   if (path.basename(executable) !== executable || !(await stat(path.join(bundle, 'Contents/MacOS', executable))).isFile()) throw new Error('更新包缺少有效的启动程序。');
@@ -87,7 +54,7 @@ export async function launchMacInstaller({ target, prepared, staging, receipt, p
   return child;
 }
 
-export function macUpdateAdapter({ app, beforeInstall, receipt }) {
+export function macUpdateAdapter({ app, beforeInstall, receipt, publicKey }) {
   let active;
   return {
     check: () => checkGitHubRelease(app.getVersion()),
@@ -99,11 +66,31 @@ export function macUpdateAdapter({ app, beforeInstall, receipt }) {
       try { staging = await mkdtemp(path.join(path.dirname(target), '.qingzuo-update-')); }
       catch { throw new Error('应用所在文件夹不可写，请将轻作移到有写入权限的“应用程序”文件夹后重试。'); }
       try {
-        const archive = path.join(staging, 'update.zip');
-        await downloadRelease(release.artifact, archive, notify, { signal: controller.signal });
-        notify({ status: 'extracting', progress: 100 });
-        const prepared = await prepareMacUpdate(archive, staging, release.version, controller.signal);
-        await rm(archive);
+        let lastTime = 0, lastStatus, lastMode;
+        const progress = value => {
+          const state = { status: 'downloading', ...value }, now = Date.now();
+          if (now - lastTime >= 150 || state.status !== lastStatus || state.mode !== lastMode || state.progress === 100 || state.fallbackReason) {
+            notify(state); lastTime = now; lastStatus = state.status; lastMode = state.mode;
+          }
+        };
+        const options = { signal: controller.signal }, updates = path.join(app.getPath('userData'), 'updates');
+        let prepared;
+        if (release.components && publicKey) {
+          try {
+            prepared = await prepareComponentUpdate({ manifestArtifact: release.components, publicKey, version: release.version, installed: target, staging,
+              cache: path.join(updates, 'components'), notify: progress, options });
+            await verifyMacBundle(prepared, release.version, controller.signal);
+          } catch (error) {
+            controller.signal.throwIfAborted();
+            await rm(path.join(staging, 'Qingzuo.app'), { recursive: true, force: true }); prepared = null;
+            progress({ fallbackReason: '组件更新暂不可用，正在使用安装包更新。', mode: 'full', reusedBytes: 0, progress: 0, transferred: 0, total: release.artifact.size });
+          }
+        }
+        if (!prepared) {
+          const archive = await downloadUpdateArchive(release.artifact, path.join(updates, 'archives'), progress, options);
+          notify({ status: 'extracting', progress: 100 });
+          prepared = await prepareMacUpdate(archive, staging, release.version, controller.signal);
+        }
         controller.signal.throwIfAborted();
         return { target, prepared, staging, receipt, profile: app.getPath('userData') };
       } catch (error) { await rm(staging, { recursive: true, force: true }); throw error; }

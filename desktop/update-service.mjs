@@ -3,7 +3,7 @@ import { latestReleaseNotes } from './updates.mjs';
 // Operations outlive renderer navigation and the Harness RPC timeout.
 // Public state never contains local paths or download URLs.
 export class UpdateService {
-  state = { status: 'idle', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0 };
+  state = { status: 'idle', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0, mode: null, fallbackReason: null, reusedBytes: 0 };
   pending = null;
   release = null;
   constructor(adapter, changed) { this.adapter = adapter; this.changed = changed; }
@@ -15,7 +15,7 @@ export class UpdateService {
   check() {
     if (this.pending || this.state.status === 'installing') return;
     this.release = null;
-    this.set({ status: 'checking', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0 });
+    this.set({ status: 'checking', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0, mode: null, fallbackReason: null, reusedBytes: 0 });
     this.start(async () => {
       this.release = await this.adapter.check();
       const { status, version, notes } = this.release;
@@ -25,7 +25,7 @@ export class UpdateService {
   download() {
     if (this.pending || this.state.status === 'installing') return;
     if (this.release?.status !== 'available' || !['available', 'error'].includes(this.state.status)) throw new Error('请先检查可用更新。');
-    this.set({ status: 'downloading', error: null, progress: 0, transferred: 0, total: this.release.artifact?.size || 0 });
+    this.set({ status: 'downloading', error: null, progress: 0, mode: null, fallbackReason: null, reusedBytes: 0, transferred: 0, total: this.release.artifact?.size || 0 });
     this.start(async () => {
       const prepared = await this.adapter.download(this.release, value => this.set(value));
       this.set({ status: 'installing', progress: 100 });
@@ -35,6 +35,7 @@ export class UpdateService {
 }
 
 export function nativeUpdateAdapter(autoUpdater) {
+  autoUpdater.disableDifferentialDownload = false;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.fullChangelog = false;
