@@ -19,7 +19,7 @@ npm run platform:prepare
 npm run desktop:start
 ```
 
-`npm run desktop:dev` 启动开发前端和桌面壳。先准备资源；LabelEdit 仍使用插件内构建的 UI。`npm test`、`npm run test:platform`、`npm run test:desktop` 和 Python `pytest` 分别验证前端、真实内核/系统沙箱/打包 RPC、桌面和原 PDF 逻辑。CI 在 macOS arm64 与 Windows x64 构建并执行同样流程。GUI 对话框测试由测试代码替代选择结果，宿主权限和 IPC 仍真实执行。
+`npm run desktop:dev` 启动开发前端和桌面壳。先准备资源；LabelEdit 仍使用插件内构建的 UI。`npm test`、`npm run test:platform`、`npm run test:desktop` 和 Python `pytest` 分别验证前端、真实内核/系统沙箱/打包 RPC、桌面和原 PDF 逻辑。CI 在 macOS arm64 与 Windows x64 构建并执行同样流程；打包后执行 `node scripts/test-packaged-desktop.mjs`，直接验证分发包内的内核、离线 OCR 和 PDF 保存。GUI 对话框测试由测试代码替代选择结果，宿主权限和 IPC 仍真实执行。
 
 ## 公开发布配置
 

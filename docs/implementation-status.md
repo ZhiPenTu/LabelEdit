@@ -5,7 +5,7 @@
 | 范围 | 当前证据 |
 | --- | --- |
 | 官方 Harness 内核 | 固定 0.2.1-alpha.1；真实 Profile 启动、7 个系统服务、工具服务调用和生命周期释放通过 Node 测试 |
-| Electron 自有界面 | macOS 实际启动，工具中心与独立 WebContentsView 标签页通过 Playwright Electron 测试；未加载上游 UI |
+| Electron 自有界面 | macOS 实际启动，工具中心与独立 WebContentsView 标签页通过 Playwright Electron 测试；完整打包应用的自有 UI、内核连接、沙箱 OCR 与 PDF 保存通过；未加载上游 UI |
 | 插件安装和恢复 | 本地安装/持久化/启停/卸载/升级恢复，损坏与恶意 ZIP、签名校验、版本和依赖拒绝通过测试；真实 Electron 的签名市场安装/更新、错误签名保留原版及内核崩溃恢复通过（使用测试目录与制品） |
 | macOS 沙箱 | 当前 macOS 27.0.1 arm64 真实进程阻止目录外读写、符号链接、直接联网和启动其他程序；不可用时拒绝运行 |
 | Windows 沙箱 | AppContainer、Job Object、低完整性工作目录和 SID ACL 清理代码完成；交叉编译通过，Windows CI 实测待记录 |
@@ -15,7 +15,7 @@
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
 | 市场 | 线上目录、签名制品与发布工具完成；生产签名密钥和正式目录内容尚待发布 |
 | 正式更新和发布 | Electron 标准更新、最新日志、签名预检和发布 CI 完成；正式签名/安装升级实测尚待凭据 |
-| 上游升级 | 当前基线是 npm 已发布最新版本；已在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；完整当前基线的桌面与权限回归已通过本地测试，跨平台 CI 继续验证 |
+| 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归已通过本地测试，跨平台 CI 继续验证 |
 
 ## 已通过的本地命令
 
@@ -24,6 +24,7 @@
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
 - `npm run test:platform`：20 个测试：真实内核、进程沙箱、Keychain、包管理、代理及打包 RPC 回归。
 - `npm run test:desktop`：2 个测试：真实 Electron 导入、隔离、标签页、离线 PDF 保存、模拟抠图保存、卸载凭据清理与市场恢复。
+- `node scripts/test-packaged-desktop.mjs`：直接启动分发目录内的应用，验证工具中心、真实 Harness 内核、沙箱 OCR 与 PDF 保存；验证和正式发布 CI 都运行此检查。
 
 ## 尚未完成的公开发布门槛
 
@@ -31,8 +32,8 @@ Apple Developer ID、notarization 和 Windows 代码签名配置；remove.bg 真
 
 ## 旧代码清理
 
-已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 复用原图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。
+已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 复用原图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。本地旧构建、旧版安装包、对比报告和临时目录也已清理。
 
 ## macOS 14 运行资源
 
-当前 Python/OCR 运行资源的 156 个 Mach-O 部署版本检查通过。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。完整安装包扫描与跨平台 CI 结果继续记录。
+当前 Python/OCR 运行资源的 156 个 Mach-O 部署版本检查通过；完整 `.app` 的 184 个 Mach-O 均支持部署目标 macOS 14.0。Electron 固定 44.0.0，与上游原生加载适配器支持的运行时指纹一致；原生适配器固定官方 0.1.6，macOS 从固定上游提交编译未修改源码，部署目标 14.0。该检查不等于在真实 macOS 14 上完成安装和沙箱验收。

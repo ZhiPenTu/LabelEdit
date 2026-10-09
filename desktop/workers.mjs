@@ -39,7 +39,10 @@ export class Workers {
       }
       // Artifacts reject symlinks on install. Avoid Node's realpath walk through
       // ungranted drive ancestors in AppContainer without broadening its ACLs.
-      const child = await launchSandbox({ executable, args: node ? ['--preserve-symlinks', '--preserve-symlinks-main', entry] : [], readOnly, writable: [cwd], cwd, launcher: this.launcher, env: node ? { ELECTRON_RUN_AS_NODE: '1' } : {} });
+      // Electron's Node mode otherwise opens the Windows NUL device even though
+      // the launcher already supplied all three handles. AppContainer denies it.
+      const nodeArgs = [...(process.platform === 'win32' ? ['--no-stdio-init'] : []), '--preserve-symlinks', '--preserve-symlinks-main', entry];
+      const child = await launchSandbox({ executable, args: node ? nodeArgs : [], readOnly, writable: [cwd], cwd, launcher: this.launcher, env: node ? { ELECTRON_RUN_AS_NODE: '1' } : {} });
       worker = new RpcWorker(child); worker.directory = cwd; worker.cleaned = child.cleanup.then(() => rm(cwd, { recursive: true, force: true, maxRetries:5, retryDelay:100 }));
       const status=await worker.call('health');if(!status?.ready)throw new Error('插件本地服务尚未就绪。');return worker;
     } catch (e) { if(worker) {await worker.stop();await worker.cleaned;} else await rm(cwd,{recursive:true,force:true,maxRetries:5,retryDelay:100}); throw e; }
