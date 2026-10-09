@@ -1,11 +1,11 @@
 # 实施状态与验收证据
 
-任务依据：`commerce-plugin-platform-taskbook.md`。[v0.2.1 已在 GitHub 发布](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.1)，修复独立安装后的内核启动失败。本文件区分发布完成与真实验收，未经验证的能力不能勾选。
+任务依据：`commerce-plugin-platform-taskbook.md`。[轻作 Qingzuo v0.2.2 已在 GitHub 发布](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.2)，更新应用名称、图标、工具中心、插件市场及 LabelEdit 编辑器。本文件区分发布完成与真实验收，未经验证的能力不能勾选。
 
 | 范围 | 当前证据 |
 | --- | --- |
 | 官方 Harness 内核 | 固定 0.2.1-alpha.1；真实 Profile 启动、7 个系统服务、工具服务调用和生命周期释放通过 Node 测试 |
-| Electron 自有界面 | macOS arm64 与 Windows x64 CI 中工具中心、独立 WebContentsView 标签页及本地服务运行时的新工具页面通过真实应用和 Playwright Electron 测试；两平台完整打包应用的自有 UI、内核连接、沙箱 OCR 与 PDF 保存通过；未加载上游 UI |
+| Electron 自有界面 | v0.2.2 使用 shadcn/ui + Base UI + Tailwind CSS 统一工具中心、市场、管理、设置、更新和编辑器；浅色/深色及 1440×1000、390×844 布局通过界面检查。macOS arm64 与 Windows x64 CI 中独立 WebContentsView 标签页及本地服务运行时的新工具页面通过真实应用和 Playwright Electron 测试；两平台完整打包应用的自有 UI、内核连接、沙箱 OCR 与 PDF 保存通过；未加载上游 UI |
 | 插件安装和恢复 | 本地安装/持久化/启停/卸载/升级恢复，损坏与恶意 ZIP、签名校验、版本和依赖拒绝通过测试；真实 Electron 的签名市场安装/更新、错误签名保留原版及内核崩溃恢复通过（使用测试目录与制品） |
 | macOS 沙箱 | 当前 macOS 27.0.1 arm64 真实进程阻止目录外读写、符号链接、直接联网和启动其他程序；不可用时拒绝运行 |
 | Windows 沙箱 | Windows Server 2025 x64 CI 中真实 AppContainer 与 Job Object 进程阻止目录外读写、符号链接、直接联网和未授权程序；系统凭据直接读取被拒绝，低完整性工作目录及 SID ACL 清理回归通过；Windows 10 最低系统验收待进行 |
@@ -13,11 +13,19 @@
 | 自制工具 | SDK 网页/本地模板在运行中的底座导入并完成调用，无需重编译底座；页面无法使用 Node；独立会话强制不可达代理并禁用非代理 WebRTC，真实 TCP/TURN 与 UDP/STUN 哨兵验证未收到插件连接；网络配置校验失败时阻止页面打开 |
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
-| 市场 | 生产 Ed25519 密钥已配置；正式目录包含 LabelEdit 和 AI 抠图的 macOS arm64 / Windows x64 签名制品，随 v0.2.0 发布并接入客户端默认目录 |
-| GitHub 更新和发布 | v0.2.1 的两平台构建、源码目录外完整应用回归及公开发布通过；安装包、插件、SDK 与最新日志已上传。默认不要求 Apple/Windows 证书，底座手动更新；插件签名保持必需。手动工作流仅上传验收制品，版本标签才公开发布。正式签名保留为可选模式；最低支持系统安装升级实测尚待进行 |
+| 市场 | v0.2.2 正式目录包含 LabelEdit 0.1.1 和 AI 抠图 0.1.0 的 macOS arm64 / Windows x64 制品，四个公开文件的 SHA-256 与生产 Ed25519 签名全部通过；客户端默认目录同步发布制品。分类、搜索、展开版本说明、安装/更新/已安装状态及加载失败重试已重新设计，并阻止将较新的已安装插件降级 |
+| GitHub 更新和发布 | v0.2.2 的两平台构建、源码目录外完整应用回归及公开发布通过；安装包、插件、SDK 与最新日志已上传。下载公开 Mac ZIP 后的独立启动、内核、OCR 和 PDF 保存通过，两平台旧版更新检查能发现 0.2.2。默认不要求 Apple/Windows 证书，底座手动更新；插件签名保持必需。手动工作流仅上传验收制品，版本标签才公开发布。正式签名保留为可选模式；最低支持系统安装升级实测尚待进行 |
 | 上游升级 | 2026-10-09 在一次性环境完成 0.2.0-rc.2→0.2.1-alpha.1 的真实 Profile/Bundle/服务生命周期升级演练；当前基线的桌面与权限回归通过两平台 CI |
 
 ## 已通过的本地命令
+
+### v0.2.2 轻作界面与发布
+
+[改版 PR #7](https://github.com/ZhiPenTu/LabelEdit/pull/7) 已合并，版本标签指向 `d6c938a369f170a1b5a9af24e5479234fba2ee54`。[PR 双平台验证](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37927695110)、[合并后验证](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37928575721) 和 [v0.2.2 正式发布](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37928653951) 全部成功。公开 Release 包含 14 个文件，安装后应用名称为 Qingzuo；沿用应用身份、用户数据目录和插件 ID，安装包仍使用 CommerceTools 文件名以兼容旧版更新检查。Windows 用户目录比较通过真实路径规范化，兼容 Electron 返回的短路径别名。
+
+本机通过 13 个前端测试、11 个 Python 测试及 4 个子测试、28 个平台测试、3 个 Electron 流程和 295 个 Mach-O 的 macOS 14 部署目标检查。IAB 与原生 Electron 检查浅色、深色、搜索与清空、真实市场目录、1440×1000 桌面和 390×844 窄屏；没有相关控制台错误或横向溢出。真实示例标签识别出 41 个文字区域，选择 Batch Number 后属性面板同步。布局、主要文案、字体、配色与表面、图标与插画、编辑器与响应式六项与设计概念核对通过；实际目录内容和 PDF 样例采用真实数据。[设计与资源记录](design/qingzuo.md) 保留视觉规则和生成提示词。
+
+发布后从公开 Release 下载四个插件包，SHA-256、GitHub 制品摘要和生产 Ed25519 签名全部匹配，默认目录采用生成的 `commerce-market.json`，保留原始签名与校验值。公开 Mac ZIP 的 SHA-256 为 `e2ef0453d6792115c5468a7444bd129d48794001409588f674c590198a36b913`，与 GitHub 摘要一致；解压后通过 `scripts/test-packaged-desktop.mjs` 再复制到源码目录外，以隔离用户目录启动，完成真实 Harness 内核、沙箱离线 OCR 和 PDF 保存。macOS arm64、Windows x64 的 v0.2.1 更新检查均返回 v0.2.2 和本版日志，v0.2.2 返回已是最新版。
 
 ### v0.2.1 内核启动修复
 
@@ -49,7 +57,7 @@ macOS 14 与 Windows 10 最低支持系统的沙箱、安装及 GitHub 手动更
 
 ## 旧代码清理
 
-已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 复用原图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。本地旧构建、旧版安装包、对比报告和临时目录也已清理。
+已移除 Tauri Rust 工程与依赖、旧更新器界面和测试、旧 HTTP/uvicorn 服务、重复开发/打包/冒烟脚本。PDF/OCR 文档操作提取到 `backend/document_service.py`，唯一入口为沙箱 RPC；Electron 最初复用原图标，v0.2.2 已替换为轻作工具盒图标。按用户补充决定移除旧公开下载与更新清单，旧源码文档与截图均移除。本地旧构建、旧版安装包、对比报告和临时目录也已清理。
 
 ## macOS 14 运行资源
 

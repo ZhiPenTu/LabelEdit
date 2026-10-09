@@ -6,18 +6,18 @@
       "title": "LabelEdit",
       "description": "本地 PDF 标签编辑、文字识别与导出",
       "category": "标签与文档",
-      "version": "0.1.0",
-      "releaseNotes": "LabelEdit 已作为独立插件接入，支持离线 PDF 编辑和 OCR。",
+      "version": "0.1.1",
+      "releaseNotes": "统一轻作视觉设计：更新编辑器工具栏、文字区域列表、属性面板与空白页，保留离线 OCR 与原尺寸 PDF 编辑导出。",
       "artifacts": {
         "darwin-arm64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.1/official.labeledit-0.1.0-darwin-arm64.ecplugin",
-          "sha256": "8d32ed05d57d01ff3f41f3855a2453ce3ba88bb49b8491bc827caf0bf7d75bea",
-          "signature": "+cVMJjGnQRVDuHJqbzvgKanKxdajxjkTgoL1tqYRg2sbvChY0N+NurMIZlXSvwRtY9eXWS1M0a2XnY5VWSgrDw=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.labeledit-0.1.1-darwin-arm64.ecplugin",
+          "sha256": "f1f31bf3dbe6169f8ff13e7d2d0e80a97ddad5eb39e1f26172642bbde260b17c",
+          "signature": "b4DIQYV5gP0MBSywW9siT0mcgK4YvsuQaaVAMcN1VGsh+WzFwM1Scxq88Ls/Vgbohd9t4Tg1VW2o7HWro8QhBw=="
         },
         "win32-x64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.1/official.labeledit-0.1.0-win32-x64.ecplugin",
-          "sha256": "30699e087edf893512e67b42cb296fe2e256912aa72b05bc5bb9e4d738e0cb5b",
-          "signature": "N7GJs2OBTVf2y/kid/LmJKxbtjKGVMUDm/DCaYv816lSS36UKKkOvtSLMZ9z2WEdgAMDDO7D5yn7RukdIAiYDg=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.labeledit-0.1.1-win32-x64.ecplugin",
+          "sha256": "d8554a63f93874b4aa92e7a3def4f3cfa6cf644696888296fdc7f1bf02e59d19",
+          "signature": "7HyrpbbCDqibba5Vve+QBWV1PUTRXTUrm6QgKzRrpUGWMy9y9/ra5nYS43tPIChQTVXh7EuXFMcmdcBPcA54BA=="
         }
       }
     },
@@ -30,14 +30,14 @@
       "releaseNotes": "选择图片、在线抠图、前后预览并保存透明 PNG。",
       "artifacts": {
         "darwin-arm64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.1/official.removebg-0.1.0-darwin-arm64.ecplugin",
-          "sha256": "0a4dd6a9a06ff793cbba034f9f42cbb2171b468a8510e52328f52436caac32d1",
-          "signature": "CooY6DoeG+jgj2D5gqnYvaV1I2CGuINl8zeCUydQlZDBv2J63ZuIVk5nTW3lMUwpJDUG14IYA1JWgI+Kt5znBg=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.removebg-0.1.0-darwin-arm64.ecplugin",
+          "sha256": "52c8fc0dd19f9fe2a3830732be9b4d51329a07cbadc2fdc5b420266607bc78f5",
+          "signature": "lPvjZD9hTcRE/+2Lz6wjKAAWANAZA2f+QiISRBX738Y9rhz44tyscbe7hk0AyJq2AuvpbU6SEbPAczxgLcZ2Ag=="
         },
         "win32-x64": {
-          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.1/official.removebg-0.1.0-win32-x64.ecplugin",
-          "sha256": "ae5218b268fa1d2c31e2568665dc7b953a0379caadd20f29bac5987cac2374a9",
-          "signature": "IE1PiSi8G1b3Pp8BKqSkZQVu1lbVFaFwx5kHgicZWquLitju/4xF7jDzQUBZDQaz9rlRT9vCkbo86AkeKv1wAg=="
+          "url": "https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.2/official.removebg-0.1.0-win32-x64.ecplugin",
+          "sha256": "36e8600abd3ae104bb75edf0027a7e4e5e3a8623253768d1f698854d034082af",
+          "signature": "JEm+3IV7ebzFkOj0wI8/DwCh/XtyiIUO1Fm+/yo+VXPTUyYHh89YdlhBCDYCbgMKqCeQkHx07O+pLFT9b3mkBA=="
         }
       }
     }
