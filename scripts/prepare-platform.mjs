@@ -1,9 +1,10 @@
-import { cp, mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile, access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pack } from '../packages/plugin-sdk/cli.mjs';
 const root = process.cwd(), generated = path.join(root, 'resources/generated');
 await mkdir(path.join(generated, 'plugins/official.labeledit'), { recursive: true });
 await cp(path.join(root, 'plugins/labeledit/package.json'), path.join(generated, 'plugins/official.labeledit/package.json'));
+await rm(path.join(generated, 'plugins/official.labeledit/ui'), { recursive: true, force: true });
 await cp(path.join(root, 'dist'), path.join(generated, 'plugins/official.labeledit/ui'), { recursive: true });
 const backend = path.join(generated, 'plugins/official.labeledit/backend/label-edit-backend');
 try { await access(path.join(backend, 'label-edit-backend' + (process.platform === 'win32' ? '.exe' : ''))); }

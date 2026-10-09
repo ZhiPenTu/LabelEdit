@@ -51,6 +51,7 @@ async function servePlugin(request, id) {
     const filename = await confinedPath(plugin.folder, decodeURIComponent(url.pathname.slice(1)));
     const response = await resourceResponse(filename);
     response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
+    console.log('Plugin resource response:', id, url.pathname, response.status, response.headers.get('content-type'));
     return response;
   } catch (error) { console.error('Plugin resource failed:', id, request.url, error.message); return new Response('Not found', { status: 404 }); }
 }
@@ -65,14 +66,16 @@ async function openView(id, settings = false) {
       // elsewhere does not install an identity-bound handler in this session.
       ses.protocol.handle('commerce-plugin', request => { console.log('Plugin resource request:', id, new URL(request.url).pathname); return servePlugin(request, id); });
       ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); const cancel = !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id); if(cancel)console.log('Plugin request blocked:',id,url.origin); callback({ cancel }); });
-      ses.on('will-download', async (event, item) => { item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
+      ses.on('will-download', async (event, item) => { console.log('Plugin download:', id, item.getFilename(), item.getMimeType()); item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
       pluginSessions.set(id, ses);
     }
     const view = new WebContentsView({ webPreferences: { session: ses, preload: path.join(root, 'desktop/plugin-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, additionalArguments: ['--commerce-plugin=' + id] } });
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    view.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
+    view.webContents.on('will-navigate', (event, url) => { console.log('Plugin navigation:', id, new URL(url).origin); if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
     view.webContents.on('will-attach-webview', event => event.preventDefault());
     view.webContents.on('did-fail-load', (_event, code, description) => console.error('Plugin view failed:', id, code, description));
+    view.webContents.on('did-stop-loading', () => console.log('Plugin loading stopped:', id, view.webContents.getURL()));
+    view.webContents.on('render-process-gone', (_event, details) => console.error('Plugin renderer gone:', id, details));
     window.contentView.addChildView(view); views.set(id, view); owners.set(view.webContents.id, id);
     try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
     catch (e) { await closeView(id); throw e; }
