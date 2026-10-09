@@ -27,6 +27,8 @@ v0.2.1 显式声明固定版本的启动运行依赖；内核模块在初始化�
 
 [修复 PR #6](https://github.com/ZhiPenTu/LabelEdit/pull/6) 已合并；[双平台验证](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37921232929) 和 [v0.2.1 正式发布](https://github.com/ZhiPenTu/LabelEdit/actions/runs/37921410975) 全部成功。本机 `/Applications` 中的修复版使用现有用户数据完成七个内核服务和离线 OCR 检查，普通启动也显示内核已连接；原 v0.2.0 应用已备份，用户数据未清除。
 
+v0.2.1 发布后，从 GitHub 下载实际 Mac ZIP，文件哈希与 Release 提供的 SHA-256 一致；解压后再次复制到独立临时目录，真实内核、离线 OCR 和 PDF 导出通过。四个公开插件制品的哈希和生产签名通过，客户端默认市场目录与发布目录一致；两平台 v0.2.0 更新检查返回 v0.2.1 及本版日志，v0.2.1 返回已是最新版。v0.2.0 发布页已注明使用修复版。
+
 - `npm run build`
 - `npm test`：13 个前端测试。
 - `python -m pytest -q`：11 个测试及 4 个子测试，包含 Python 框架资源转换与越界/循环链接拒绝。
