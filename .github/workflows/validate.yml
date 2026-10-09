@@ -1,11 +1,17 @@
-name: Validate desktop
+name: Validate commerce desktop
 on:
   pull_request:
   push:
-    branches: ['codex/**']
+    branches: [main]
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   desktop:
     strategy:
@@ -16,6 +22,7 @@ jobs:
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,41 +37,43 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
-      - name: Install development dependencies
-        shell: bash
+          workspaces: 'native/sandbox -> target'
+      - name: Install dependencies and prepare models
         run: |
           python -m pip install -r requirements-dev.txt
-          npm ci
-      - name: Prepare offline models and test source
-        shell: bash
-        run: |
+          npm ci --ignore-scripts
+          node node_modules/electron/install.js
+          npm run build:harness-native
           python -m backend.ocr_service
+      - name: Source checks
+        run: |
           python -m pytest -q
-          npm run test
+          npm test
           npm run build
-          cargo check --manifest-path src-tauri/Cargo.toml
-      - name: Build isolated backend
-        run: python scripts/build_backend.py
-      - name: Verify packaged backend offline
+          npm run build:sandbox
+      - name: Build offline RPC plugin
+        run: python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+      - name: Prepare and test actual sandboxed processes
+        run: |
+          npm run platform:prepare
+          node scripts/verify-macos-runtime.mjs
+          npm run test:platform
+          node scripts/test-plugin-navigation.mjs
+          npx playwright test --config tests/electron/playwright.config.mjs
+      - name: Package Electron application (validation only)
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            backend="src-tauri/resources/backend/label-edit-backend/label-edit-backend.exe"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            npx electron-builder --dir --mac --arm64 --publish never --config electron-builder.yml -c.mac.identity=null -c.mac.notarize=false
+            node scripts/verify-macos-runtime.mjs "release/desktop/mac-arm64/Commerce Tools.app"
           else
-            backend="src-tauri/resources/backend/label-edit-backend/label-edit-backend"
+            npx electron-builder --dir --win --x64 --publish never --config electron-builder.yml
           fi
-          python scripts/smoke_backend.py --backend "$backend" --offline --report output/offline-smoke.json
-      - name: Build desktop without publishing
-        shell: bash
-        run: CI=true npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
-      - name: Verify final desktop resources offline
-        run: python scripts/smoke_desktop.py
+          node scripts/test-packaged-desktop.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: LabelEdit-${{ runner.os }}
+          name: Commerce-validation-${{ runner.os }}
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/nsis/*.exe
-            output/offline-smoke.json
-            output/installed-offline-smoke.json
+            output/electron-tests/
+            release/desktop/

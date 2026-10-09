@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {mkdtemp,symlink,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import path from 'node:path';import os from 'node:os';
+test('SDK CLI works through its installed binary symlink',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'commerce-sdk-'));try{const bin=path.join(dir,'commerce-plugin');await symlink(path.resolve('packages/plugin-sdk/cli.mjs'),bin,'file');execFileSync(process.execPath,[bin,'create','fixture-native','--native'],{cwd:dir});const pkg=JSON.parse(await readFile(path.join(dir,'fixture-native/package.json')));assert.equal(pkg.commerce.id,'local.fixture-native');assert.equal(pkg.commerce.backend.type,'node');}finally{await rm(dir,{recursive:true,force:true});}
+});

@@ -1,0 +1,9 @@
+{
+  "name": "@commerce/plugin-removebg", "version": "0.1.0", "private": true,
+  "commerce": {
+    "manifestVersion": 1, "id": "official.removebg", "title": "AI 抠图",
+    "description": "连接 remove.bg，生成透明背景的商品图片", "category": "图片处理", "api": "^1.0.0",
+    "ui": "ui/index.html", "releaseNotes": "选择图片、在线抠图、前后预览并保存透明 PNG。",
+    "permissions": { "files": true, "credentials": ["removebg"], "network": ["https://api.remove.bg"] }
+  }
+}

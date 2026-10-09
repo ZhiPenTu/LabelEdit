@@ -1,0 +1,11 @@
+{
+  "name": "@commerce/plugin-labeledit", "version": "0.1.0", "private": true,
+  "commerce": {
+    "manifestVersion": 1, "id": "official.labeledit", "title": "LabelEdit",
+    "description": "本地 PDF 标签编辑、文字识别与导出", "category": "标签与文档", "api": "^1.0.0",
+    "ui": "ui/index.html", "releaseNotes": "LabelEdit 已作为独立插件接入，支持离线 PDF 编辑和 OCR。",
+    "permissions": { "files": true },
+    "services": { "provides": ["labeledit.pdf"] },
+    "backend": { "type": "executable", "entry": { "darwin-arm64": "backend/label-edit-backend/label-edit-backend", "win32-x64": "backend/label-edit-backend/label-edit-backend.exe" } }
+  }
+}

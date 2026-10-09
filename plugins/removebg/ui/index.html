@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI 抠图</title><link rel="stylesheet" href="style.css"></head>
+<body><main><header><p class="eyebrow">图片处理</p><h1>AI 抠图</h1><p>为商品图片生成透明背景。图片将上传至 remove.bg，使用你自己的调用额度。</p></header>
+<section class="settings"><label for="key">remove.bg API 密钥</label><div class="row"><input type="password" id="key" autocomplete="off" placeholder="输入密钥，保存在系统凭据库"><button id="save-key">保存密钥</button><button id="clear-key" class="secondary">删除密钥</button></div><p id="key-status" role="status"></p></section>
+<section class="actions"><button id="pick">选择商品图片</button><button id="run" disabled>开始抠图</button><button id="cancel" class="secondary" disabled>取消</button><button id="download" class="secondary" disabled>保存透明 PNG</button></section>
+<p id="status" role="status">支持 JPG、PNG 和 WebP，最大 22 MB。</p>
+<section class="previews"><figure><figcaption>原图</figcaption><div class="preview"><img id="original" alt="选择的商品图片" hidden><p id="original-empty">选择图片后在这里预览</p></div></figure><figure><figcaption>透明背景</figcaption><div class="preview checker"><img id="result" alt="抠图结果" hidden><p id="result-empty">抠图结果会显示在这里</p></div></figure></section>
+</main><script type="module" src="app.mjs"></script></body></html>

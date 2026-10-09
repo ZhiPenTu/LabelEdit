@@ -52,7 +52,7 @@ export function useEditor() {
     if (pendingMove.current) send({ type: 'patch', patch: pendingMove.current.snapshot });
     pendingMove.current = null;
     invalidatePreview();
-    send({ type: 'patch', patch: { operation: 'opening', error: null, notice: null, download: null } });
+    send({ type: 'patch', patch: { operation: 'opening', error: null, notice: null } });
     try {
       const doc = await loader();
       if (generation !== openGeneration.current) {
@@ -150,7 +150,7 @@ export function useEditor() {
     if (isBusy(current.current) || !await flushMoves()) return;
     const before = current.current;
     if (!before.edits.some(edit => edit.id === id)) {
-      send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: (before.regionsByPage[before.page] ?? []).filter(region => region.id !== id) }, selectedId: null, download: null } });
+      send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: (before.regionsByPage[before.page] ?? []).filter(region => region.id !== id) }, selectedId: null } });
       return;
     }
     await commitEdits(before.edits.filter(edit => edit.id !== id), '已移除这项修改。', '移除未完成');
@@ -179,7 +179,7 @@ export function useEditor() {
     if (!before.document || isBusy(before)) return;
     const region: TextRegion = { id: `manual-${crypto.randomUUID()}`, page: before.page, rect, text: '', confidence: 1,
       font_size: Math.max(1, Math.min(12, before.document.pages[before.page].height_pt * rect.height * 0.72)), bold: false, source: 'manual' };
-    send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: [...(before.regionsByPage[before.page] ?? []), region] }, selectedId: region.id, download: null,
+    send({ type: 'patch', patch: { regionsByPage: { ...before.regionsByPage, [before.page]: [...(before.regionsByPage[before.page] ?? []), region] }, selectedId: region.id,
       notice: '已框选区域，在右侧输入替换文字。留空可清除区域内容。' } });
   }
 
@@ -199,19 +199,13 @@ export function useEditor() {
     const before = current.current;
     if (!before.document) return;
     const generation = openGeneration.current;
-    send({ type: 'patch', patch: { operation: 'exporting', error: null, notice: null, download: null } });
+    send({ type: 'patch', patch: { operation: 'exporting', error: null, notice: null } });
     try {
-      await api.export(before.document.id, before.edits);
+      const exported = await api.export(before.document.id, before.edits);
       if (!isCurrent(before.document.id, generation)) return;
-      const url = api.downloadUrl(before.document.id);
       const filename = before.document.filename.replace(/\.pdf$/i, '') + ' - 已编辑.pdf';
-      send({ type: 'patch', patch: { download: { url, filename }, notice: 'PDF 已生成。若下载未开始，可点击下方链接。' } });
-      const anchor = window.document.createElement('a');
-      anchor.href = url;
-      anchor.download = filename;
-      window.document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
+      const saved = await api.save(exported, filename);
+      if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { notice: saved ? 'PDF 已保存。' : '已取消保存 PDF。' } });
     } catch (failure) {
       if (isCurrent(before.document.id, generation)) send({ type: 'patch', patch: { error: `PDF 导出失败：${errorMessage(failure)}` } });
     } finally {
@@ -240,7 +234,6 @@ export function useEditor() {
     select: (selectedId: string | null) => send({ type: 'patch', patch: { selectedId } }),
     setLanguage: (language: Language) => send({ type: 'patch', patch: { language } }),
     clearError: () => send({ type: 'patch', patch: { error: null } }), clearNotice: () => send({ type: 'patch', patch: { notice: null } }),
-    invalidateDownload: () => { if (current.current.download) send({ type: 'patch', patch: { download: null, notice: null } }); },
     imageFailed: () => send({ type: 'patch', patch: { error: '页面图片加载失败，请重新打开 PDF 或检查本机服务。' } }),
   };
 }

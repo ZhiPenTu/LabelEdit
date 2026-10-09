@@ -10,14 +10,11 @@ __pycache__/
 tmp/
 output/
 .models/
-.python-runtime/
-.uv-cache/
 *.tsbuildinfo
 
-# Tauri
-src-tauri/target/
-src-tauri/updater.key
-src-tauri/resources/backend/*
-!src-tauri/resources/backend/.gitkeep
-dist-backend/
 build/
+native/sandbox/target/
+release/
+.commerce-dev/
+resources/generated/
+*.ecplugin

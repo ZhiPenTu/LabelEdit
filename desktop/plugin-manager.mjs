@@ -1,0 +1,127 @@
+import { mkdir, readFile, writeFile, rename, rm, readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID, createHash, verify, createPublicKey } from 'node:crypto';
+import AdmZip from 'adm-zip';
+import semver from 'semver';
+import { validateManifest, safeRelative, confinedPath, TARGET } from './security.mjs';
+export const MAX_PACKAGE_BYTES = 512 * 1024 * 1024;
+export function verifyArtifact(bytes, record, publicKey) {
+  if (!publicKey || !record?.signature || !record?.sha256 || record.platform !== TARGET) throw new Error('市场制品缺少可信签名或平台信息。');
+  if (createHash('sha256').update(bytes).digest('hex') !== record.sha256) throw new Error('插件包校验失败。');
+  const key = typeof publicKey === 'string' || Buffer.isBuffer(publicKey) ? createPublicKey(publicKey) : publicKey;
+  if (key.asymmetricKeyType !== 'ed25519') throw new Error('市场签名必须使用 Ed25519。');
+  if (!verify(null, bytes, key, Buffer.from(record.signature, 'base64'))) throw new Error('插件签名无效。');
+}
+export function inspectPackage(bytes) {
+  if(bytes.length>MAX_PACKAGE_BYTES)throw new Error('插件包过大。');
+  const entry=new AdmZip(bytes).getEntry('package.json');if(!entry || entry.header.size>65536)throw new Error('插件清单缺失或过大。');
+  return validateManifest(JSON.parse(entry.getData().toString('utf8')));
+}
+export async function unpackPackage(bytes, destination) {
+  if (bytes.length > MAX_PACKAGE_BYTES) throw new Error('插件包过大。');
+  inspectPackage(bytes);
+  const zip = new AdmZip(bytes), entries = zip.getEntries(), seen = new Set();
+  if (entries.length > 20000) throw new Error('插件包文件过多。');
+  let total = 0;
+  for (const e of entries) {
+    const name = e.entryName.replace(/\/$/, ''); safeRelative(name);
+    const normalized = name.toLowerCase();
+    if (seen.has(normalized)) throw new Error('插件包包含重复路径。'); seen.add(normalized);
+    const mode = e.header.attr >>> 16;
+    if ((mode & 0xf000) === 0xa000 || (mode & 0xf000) !== 0 && ![0x8000, 0x4000].includes(mode & 0xf000)) throw new Error('插件包含不支持的文件类型。');
+    total += e.header.size; if (total > 2 * 1024 ** 3) throw new Error('插件包展开后过大。');
+  }
+  await mkdir(destination, { recursive: true, mode: 0o700 });
+  for (const e of entries) {
+    const file = path.join(destination, e.entryName);
+    if (e.isDirectory) await mkdir(file, { recursive: true, mode: 0o700 });
+    else { await mkdir(path.dirname(file), { recursive: true, mode: 0o700 }); await writeFile(file, e.getData(), { mode: (e.header.attr >>> 16) & 0o111 ? 0o700 : 0o600 }); }
+  }
+  const pkg = JSON.parse(await readFile(path.join(destination, 'package.json'), 'utf8'));
+  const manifest = validateManifest(pkg);
+  await confinedPath(destination, manifest.ui);
+  if (manifest.settings) await confinedPath(destination, manifest.settings.entry);
+  if (manifest.backend) await confinedPath(destination, manifest.backend.entry[TARGET]);
+  return manifest;
+}
+export class PluginManager {
+  constructor(root, bundled, { publicKey, stop = async () => {}, probe = async () => {}, forget = async () => {} } = {}) {
+    this.root = root; this.bundled = bundled; this.publicKey = publicKey; this.stop = stop; this.probe = probe; this.forget = forget;
+    this.state = { plugins: {} }; this.defaults = new Map(); this.queue = Promise.resolve();
+  }
+  async initialize() {
+    await mkdir(this.root, { recursive: true, mode: 0o700 });
+    try { this.state = JSON.parse(await readFile(path.join(this.root, 'state.json'), 'utf8')); if (!this.state.plugins || typeof this.state.plugins !== 'object' || Array.isArray(this.state.plugins) || Object.values(this.state.plugins).some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('invalid state'); }
+    catch (e) { if (e.code !== 'ENOENT') await rename(path.join(this.root, 'state.json'), path.join(this.root, 'state.corrupt-' + Date.now() + '.json')); this.state = { plugins: {} }; }
+    for (const name of await readdir(this.bundled)) {
+      const folder = path.join(this.bundled, name);
+      const manifest = validateManifest(JSON.parse(await readFile(path.join(folder, 'package.json'), 'utf8')));
+      this.defaults.set(manifest.id, { ...manifest, folder, source: 'bundled', enabled: true });
+    }
+    // Staging is never active; discard interrupted transactions on the next boot.
+    await rm(path.join(this.root, '.staging'), { recursive: true, force: true });
+  }
+  transaction(work) { const result = this.queue.then(work); this.queue = result.catch(() => {}); return result; }
+  async persist() { const temporary = path.join(this.root, 'state-' + randomUUID() + '.tmp'); await writeFile(temporary, JSON.stringify(this.state), { mode: 0o600 }); await rename(temporary, path.join(this.root, 'state.json')); }
+  async list() {
+    const items = new Map(this.defaults);
+    for (const [id, row] of Object.entries(this.state.plugins)) {
+      if (row.removed) { items.delete(id); continue; }
+      if (row.folder) {
+        try { const folder = await confinedPath(this.root, row.folder); const manifest = validateManifest(JSON.parse(await readFile(path.join(folder, 'package.json'), 'utf8'))); if (manifest.id !== id) throw new Error('invalid identity'); items.set(id, { ...manifest, ...row, folder }); }
+        catch (error) { const fallback = this.defaults.get(id); if (fallback) items.set(id, { ...fallback, error: error.message }); }
+      } else if (items.has(id)) items.set(id, { ...items.get(id), enabled: row.enabled !== false });
+    }
+    const providers = new Set([...items.values()].filter(p => p.enabled).flatMap(p => p.services?.provides ?? []));
+    return [...items.values()].map(p => ({ ...p, missing: (p.services?.requires ?? []).filter(s => !providers.has(s)) }));
+  }
+  async get(id) { const p = (await this.list()).find(p => p.id === id); if (!p) throw new Error('插件未安装。'); return p; }
+  async install(bytes, { source = 'local', record } = {}) {
+    return this.transaction(async () => {
+      if (source === 'market') verifyArtifact(bytes, record, this.publicKey);
+      const staged = path.join(this.root, '.staging', randomUUID());
+      try {
+        const m = await unpackPackage(bytes, staged);
+        if (record && (record.id !== m.id || record.version !== m.version)) throw new Error('市场清单与插件包不一致。');
+        const installed = (await this.list()).find(p => p.id === m.id);
+        if (source === 'market' && installed && !semver.gt(m.version, installed.version)) throw new Error('市场版本必须高于已安装版本。');
+        const conflicts = (await this.list()).filter(p => p.id !== m.id && p.enabled && (p.services?.provides ?? []).some(service => m.services?.provides?.includes(service)));
+        if (conflicts.length) throw new Error('服务已由其他插件提供：' + conflicts.map(p => p.title).join('、'));
+        const previous = this.state.plugins[m.id] && !this.state.plugins[m.id].removed ? structuredClone(this.state.plugins[m.id]) : null;
+        const relative = 'installed/' + m.id + '/' + m.version + '-' + randomUUID();
+        const folder = path.join(this.root, relative); await mkdir(path.dirname(folder), { recursive: true }); await rename(staged, folder);
+        await this.stop(m.id);
+        this.state.plugins[m.id] = { folder: relative, enabled: true, source, previous };
+        try { const item = await this.get(m.id); if (item.missing.length) throw new Error('缺少服务依赖：' + item.missing.join('、')); await this.probe(item); await this.persist(); }
+        catch (error) { if (previous) this.state.plugins[m.id] = previous; else delete this.state.plugins[m.id]; await this.stop(m.id); await rm(folder, { recursive: true, force: true }); throw error; }
+        return m;
+      } finally { await rm(staged, { recursive: true, force: true }); }
+    });
+  }
+  async setEnabled(id, enabled) { return this.transaction(async () => {
+    await this.get(id);const previous=this.state.plugins[id];await this.stop(id);
+    this.state.plugins[id]={...previous,enabled:Boolean(enabled)};
+    try {if(enabled){const item=await this.get(id);if(item.missing.length)throw new Error('缺少服务依赖：'+item.missing.join('、'));await this.probe(item);}await this.persist();}
+    catch(error){await this.stop(id);if(previous)this.state.plugins[id]=previous;else delete this.state.plugins[id];throw error;}
+  }); }
+  async uninstall(id) { return this.transaction(async () => { const plugin = await this.get(id); await this.stop(id); await this.forget(plugin); this.state.plugins[id] = { removed: true }; await this.persist(); await rm(path.join(this.root,'installed',id),{recursive:true,force:true,maxRetries:5,retryDelay:100}); }); }
+  async rollback(id) { return this.transaction(async () => { const row = this.state.plugins[id]; if (!row?.previous && !this.defaults.has(id)) throw new Error('没有可恢复的版本。'); await this.stop(id); if (row.previous) this.state.plugins[id] = row.previous; else delete this.state.plugins[id];
+    try {const target=await this.get(id);if(target.missing.length)throw new Error('恢复版本缺少服务依赖。');if(target.enabled)await this.probe(target);await this.persist();}
+    catch(error){await this.stop(id);this.state.plugins[id]=row;throw error;} }); }
+}
+export async function boundedDownload(url, limit = MAX_PACKAGE_BYTES, signal) {
+  const parsed = new URL(url); if (parsed.protocol !== 'https:') throw new Error('下载地址必须使用 HTTPS。');
+  let address=parsed, response;
+  for(let hop=0;hop<6;hop++) {
+    if(address.protocol !== 'https:' || address.username || address.password) throw new Error('下载地址必须使用 HTTPS。');
+    response=await fetch(address,{signal:signal ?? AbortSignal.timeout(120000),redirect:'manual'});
+    if(![301,302,303,307,308].includes(response.status)) break;
+    const location=response.headers.get('location'); await response.body?.cancel(); if(!location || hop===5) throw new Error('下载重定向无效。');
+    address=new URL(location,address);
+  }
+  if (!response.ok) throw new Error('下载失败（' + response.status + '）。');
+  if (Number(response.headers.get('content-length')) > limit) throw new Error('下载内容过大。');
+  const chunks = []; let size = 0;
+  for await (const chunk of response.body) { size += chunk.length; if (size > limit) {  throw new Error('下载内容过大。'); } chunks.push(chunk); }
+  return Buffer.concat(chunks);
+}

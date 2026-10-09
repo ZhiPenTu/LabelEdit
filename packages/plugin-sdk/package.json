@@ -1,0 +1,25 @@
+{
+  "name": "@commerce/plugin-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    }
+  },
+  "bin": {
+    "commerce-plugin": "./cli.mjs"
+  },
+  "dependencies": {
+    "adm-zip": "0.5.16",
+    "semver": "7.8.5"
+  },
+  "files": [
+    "index.mjs",
+    "index.d.ts",
+    "manifest.mjs",
+    "cli.mjs"
+  ],
+  "license": "MIT"
+}

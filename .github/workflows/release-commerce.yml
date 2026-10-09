@@ -1,0 +1,102 @@
+name: Release signed commerce desktop
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+defaults:
+  run:
+    shell: bash
+jobs:
+  signed:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'
+      COMMERCE_PLUGIN_SIGNING_KEY: ${{ secrets.COMMERCE_PLUGIN_SIGNING_KEY }}
+      COMMERCE_PLUGIN_PUBLIC_KEY: ${{ vars.COMMERCE_PLUGIN_PUBLIC_KEY }}
+      CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require production signing configuration
+        run: node scripts/release-preflight.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          npm ci --ignore-scripts
+          node node_modules/electron/install.js
+          npm run build:harness-native
+          python -m pip install -r requirements-dev.txt
+          python -m backend.ocr_service
+          python -m pytest -q
+          npm test
+          npm run build
+          npm run build:sandbox
+          python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
+          npm run platform:prepare
+          node scripts/verify-macos-runtime.mjs
+          npm run test:platform
+          node scripts/test-plugin-navigation.mjs
+          npx playwright test --config tests/electron/playwright.config.mjs
+      - name: Build signed and notarized installers
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            npx electron-builder --mac --arm64 --publish never --config electron-builder.yml -c.forceCodeSigning=true
+          else
+            npx electron-builder --win --x64 --publish never --config electron-builder.yml -c.forceCodeSigning=true
+          fi
+          node scripts/test-packaged-desktop.mjs
+      - name: Verify production signatures
+        run: node scripts/verify-signatures.mjs
+      - name: Build independently signed plugin artifacts
+        run: node scripts/market-artifacts.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ runner.os }}
+          path: |
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.exe
+            release/desktop/*.blockmap
+            release/desktop/latest*.yml
+            release/market/*
+  publish:
+    needs: signed
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signed-*
+          path: release
+          merge-multiple: true
+      - name: Merge platform catalog
+        run: |
+          npm pack --workspace @commerce/plugin-sdk --pack-destination release/market
+          node scripts/merge-market.mjs release/market/catalog-*.json
+      - name: Publish validated release
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/desktop/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "Commerce Tools $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
