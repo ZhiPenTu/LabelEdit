@@ -9,7 +9,7 @@
 | 插件安装和恢复 | 本地安装/持久化/启停/卸载/升级恢复，损坏与恶意 ZIP、签名校验、版本和依赖拒绝通过测试；真实 Electron 的签名市场安装/更新、错误签名保留原版及内核崩溃恢复通过（使用测试目录与制品） |
 | macOS 沙箱 | 当前 macOS 27.0.1 arm64 真实进程阻止目录外读写、符号链接、直接联网和启动其他程序；不可用时拒绝运行 |
 | Windows 沙箱 | Windows Server 2025 x64 CI 中真实 AppContainer 与 Job Object 进程阻止目录外读写、符号链接、直接联网和未授权程序；系统凭据直接读取被拒绝，低完整性工作目录及 SID ACL 清理回归通过；Windows 10 最低系统验收待进行 |
-| LabelEdit | 构建输出的内部库链接转为普通文件，保持插件 ZIP 不含链接；独立 ZIP 打包/解包后在真实沙箱中完成 PDF 上传、RapidOCR、文字修改、预览、导出尺寸与源文件不变回归；桌面导出保存通过 |
+| LabelEdit | 构建输出的内部库及 Python 框架别名转为普通文件/目录，逐层拒绝外部、循环及损坏链接，保持插件 ZIP 不含链接；独立 ZIP 打包/解包后在真实沙箱中完成 PDF 上传、RapidOCR、文字修改、预览、导出尺寸与源文件不变回归；桌面导出保存通过 |
 | 自制工具 | SDK 网页/本地模板在运行中的底座导入并完成调用，无需重编译底座；页面无法使用 Node；独立会话强制不可达代理并禁用非代理 WebRTC，真实 TCP/TURN 与 UDP/STUN 哨兵验证未收到插件连接；网络配置校验失败时阻止页面打开 |
 | 凭据 | macOS Keychain 和 Windows Credential Manager 实测写入、读取、跨插件隔离及删除通过；实际沙箱进程无法读取宿主创建的测试条目，测试拒绝超时、崩溃及非凭据 API 错误的假阳性 |
 | AI 抠图 | 模拟 API 测试通过缺少密钥、额度不足、取消、无自动重试、PNG 预览与保存；真实 remove.bg 调用待用户配置 |
@@ -21,6 +21,7 @@
 
 - `npm run build`
 - `npm test`：13 个前端测试。
+- `python -m pytest -q`：11 个测试及 4 个子测试，包含 Python 框架资源转换与越界/循环链接拒绝。
 - `npm run build:sandbox`，Windows `cargo check --target x86_64-pc-windows-gnu`。
 - `npm run test:platform`：21 个测试：真实内核、进程沙箱、系统凭据、包管理、代理及打包 RPC 回归。
 - `node scripts/test-plugin-navigation.mjs`：不接入调试器的真实应用检查，连续并发打开网页工具，在本地服务运行时再打开工具，验证同一插件只有一个页面、WebRTC 的真实 TCP/UDP 请求被阻止及关闭后释放处理进程；Windows 额外检查桌面可执行文件 ACL 不受插件影响。

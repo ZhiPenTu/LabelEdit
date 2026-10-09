@@ -17,7 +17,7 @@ npm run plugin -- pack my-tool my-tool.ecplugin
 
 `package.json.commerce` 声明 `manifestVersion: 1`、全局唯一 `id`、`title`、`description`、`api: ^1.0.0`、相对 `ui`、可选 `settings`、`permissions`、`services.provides/requires` 与 `backend`。本地程序以 `backend.entry.darwin-arm64` / `win32-x64` 声明入口。禁止绝对路径、符号链接、目录穿越、系统插件 ID、安装脚本执行和同名服务覆盖。
 
-原生构建工具生成的库别名需在打包前转成普通文件。LabelEdit 构建脚本只处理 PyInstaller 输出目录内指向内部普通文件的链接；外部链接、目录链接及无效链接会使构建失败。安装器继续拒绝所有 ZIP 符号链接。
+原生构建工具生成的库和框架别名需在打包前转成普通文件及目录。LabelEdit 构建脚本只复制 PyInstaller 输出目录内部的资源，逐层校验目录别名；外部链接、循环链接及无效链接会使构建失败。安装器继续拒绝所有 ZIP 符号链接。
 
 SDK 提供文件选择/读取/保存、凭据设置/状态/清除、受控网络请求、服务调用、工具/设置贡献、取消和清理。凭据读取仅存在于可信代理，插件页面无法读取已保存密钥。界面通过 `createPluginClient()` 获得 API；类型见 `packages/plugin-sdk/index.d.ts`。普通网络请求支持 HTTPS 的 GET/POST/PUT/PATCH/DELETE、JSON 内容及按引用注入 Bearer/X-Api-Key，响应为状态、MIME 和 Base64 数据。remove.bg 另提供受控文件上传适配器，返回可保存文件令牌。代理锁定已解析目标，禁止私网、重定向及未声明来源；公共域名兼容系统 TUN 的 198.18/15 映射，并始终验证该域名的 TLS 证书。任务取消会停止调用方本地进程并终止在线请求；失败请求不会自动重发。
 

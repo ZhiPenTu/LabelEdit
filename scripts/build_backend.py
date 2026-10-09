@@ -19,14 +19,35 @@ def run(*args: str) -> None:
 def materialize_internal_links(destination: Path) -> None:
     """Normalize trusted PyInstaller output to the plugin ZIP's no-link format."""
     root = destination.resolve(strict=True)
-    for file in root.rglob("*"):
+
+    def copy_resource(source: Path, output: Path, ancestors: frozenset[Path]) -> None:
+        resolved = source.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            raise RuntimeError(f"External link in backend artifact: {source}")
+        if resolved.is_dir():
+            if resolved in ancestors:
+                raise RuntimeError(f"Cyclic directory link in backend artifact: {source}")
+            output.mkdir()
+            for child in resolved.iterdir():
+                copy_resource(child, output / child.name, ancestors | {resolved})
+            shutil.copystat(resolved, output)
+        elif resolved.is_file():
+            shutil.copy2(resolved, output)
+        else:
+            raise RuntimeError(f"Unsupported resource in backend artifact: {source}")
+
+    # CPython framework builds also contain directory aliases (Resources and
+    # Versions/Current). Resolve each copied resource against the original tree,
+    # so relative links retain their meaning without admitting external paths.
+    for file in list(root.rglob("*")):
         if not file.is_symlink():
             continue
-        target = file.resolve(strict=True)
-        if not target.is_relative_to(root) or not target.is_file():
-            raise RuntimeError(f"Unsupported link in backend artifact: {file}")
-        file.unlink()
-        shutil.copy2(target, file)
+        with TemporaryDirectory(prefix=".materialize-", dir=file.parent) as directory:
+            output = Path(directory) / "resource"
+            ancestors = frozenset(parent.resolve() for parent in file.parents)
+            copy_resource(file, output, ancestors)
+            file.unlink()
+            output.rename(file)
 
 
 def main() -> None:
