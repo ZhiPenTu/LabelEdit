@@ -21,6 +21,8 @@ npm run desktop:start
 
 `npm run desktop:dev` 启动开发前端和桌面壳。先准备资源；LabelEdit 仍使用插件内构建的 UI。`npm test`、`npm run test:platform`、`npm run test:desktop` 和 Python `pytest` 分别验证前端、真实内核/系统沙箱/打包 RPC、桌面和原 PDF 逻辑。CI 在 macOS arm64 与 Windows x64 构建并执行同样流程；打包后执行 `node scripts/test-packaged-desktop.mjs`，直接验证分发包内的内核、离线 OCR 和 PDF 保存。GUI 对话框测试由测试代码替代选择结果，宿主权限和 IPC 仍真实执行。
 
+`node scripts/test-plugin-navigation.mjs` 在不接入调试器的应用中验证多插件页面和本地服务同时使用。Windows 本地 Node 插件使用宿主在任务根目录建立的私有运行资源副本，AppContainer 只取得该副本的只读权限，不能修改正在运行的桌面壳可执行文件及 DLL 的 ACL。缓存由宿主建立，重启时清理并从当前应用资源重建，插件无需自行安装运行时。
+
 ## 公开发布配置
 
 GitHub Secrets：`MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`、`COMMERCE_PLUGIN_SIGNING_KEY`（Ed25519 PKCS8 PEM）。Repository variable：`COMMERCE_PLUGIN_PUBLIC_KEY`（SPKI PEM）。私钥只保留在用户受保护的存储与 Secrets 中。remove.bg 密钥由用户在插件页面保存到系统凭据库，不放入 CI。

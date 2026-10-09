@@ -4,12 +4,20 @@ import {mkdtemp,readFile,rm,access} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import os from 'node:os';import path from 'node:path';
 import {Workers} from '../../desktop/workers.mjs';
+import {pack} from '../../packages/plugin-sdk/cli.mjs';
+import {unpackPackage} from '../../desktop/plugin-manager.mjs';
 const folder=path.resolve('resources/generated/plugins/official.labeledit');
 test('packaged offline LabelEdit runs PDF → real OCR → edit → preview → export through OS-sandboxed RPC', {timeout:90000}, async () => {
   const jobs=await mkdtemp(path.join(os.tmpdir(),'commerce-rpc-'));const workers=new Workers(jobs,path.resolve('resources/generated/commerce-sandbox'+(process.platform==='win32'?'.exe':'')),process.execPath);
   const original=await readFile('文具新大 70X40.pdf');
   try {
-    const plugin={...JSON.parse(await readFile(folder+'/package.json')).commerce,folder,enabled:true,missing:[]};
+    // Exercise the independently distributed artifact, rather than only its
+    // build directory: package format, native modes and bundled dependencies
+    // must survive the same extraction used for installation and updates.
+    const artifact=path.join(jobs,'labeledit.ecplugin'),installed=path.join(jobs,'installed');
+    await pack(folder,artifact);
+    const manifest=await unpackPackage(await readFile(artifact),installed);
+    const plugin={...manifest,folder:installed,enabled:true,missing:[]};
     const worker=await workers.start(plugin);assert.equal((await worker.call('health')).ocr.ready,true);
     const doc=await worker.call('upload',{data:original.toString('base64'),filename:'sample.pdf'});assert.equal(doc.pages[0].width_mm,70);
     const recognition=await worker.call('recognize',{id:doc.id,page:0,language:'latin'});assert.match(recognition.engine,/RapidOCR/);

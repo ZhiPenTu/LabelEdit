@@ -10,7 +10,6 @@ defaults:
     shell: bash
 jobs:
   signed:
-    if: ${{ !startsWith(github.ref, 'refs/tags/v0.1.') }}
     strategy:
       fail-fast: false
       matrix:

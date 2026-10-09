@@ -19,6 +19,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'commerce', privileges: { standa
 let window, manager, workers, files, credentials, network, host, quitting = false, hostReady;
 const views = new Map(), owners = new Map(), kernelRequests = new Map(); let kernelCounter = 0; let visible = null, systems = [], kernelError = null;
 const pluginSessions = new Map();
+const viewQueues = new Map(), viewEpochs = new Map();
 const update = { status: 'idle', version: null, notes: '', error: null, progress: 0 };
 const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
 const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
@@ -34,6 +35,7 @@ function assertFrame(event, shellOnly = false) {
 function validateCall(method, args) { if (typeof method !== 'string' || method.length > 80 || (JSON.stringify(args) ?? '').length > 38_000_000) throw new Error('请求无效或过大。'); }
 function hideViews() { for (const v of views.values()) v.setVisible(false); visible = null; }
 async function closeView(id) {
+  viewEpochs.set(id,(viewEpochs.get(id) ?? 0)+1);
   const view = views.get(id); if (view) { views.delete(id); if (!view.webContents.isDestroyed()) { view.webContents.send('commerce:dispose'); owners.delete(view.webContents.id); if (window && !window.isDestroyed()) window.contentView.removeChildView(view); view.webContents.close(); } }
   if (visible === id) visible = null; network?.stop(id); await files?.revoke(id); await workers?.stop(id);
 }
@@ -51,30 +53,47 @@ async function servePlugin(request, id) {
     const filename = await confinedPath(plugin.folder, decodeURIComponent(url.pathname.slice(1)));
     const response = await resourceResponse(filename);
     response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
-    console.log('Plugin resource response:', id, url.pathname, response.status, response.headers.get('content-type'));
     return response;
   } catch (error) { console.error('Plugin resource failed:', id, request.url, error.message); return new Response('Not found', { status: 404 }); }
 }
-async function openView(id, settings = false) {
+function openView(id, settings = false) {
+  const epoch=viewEpochs.get(id) ?? 0;
+  const operation=(viewQueues.get(id) ?? Promise.resolve()).catch(()=>{}).then(()=>loadView(id,settings,epoch));
+  viewQueues.set(id,operation);
+  const clear=()=>{if(viewQueues.get(id)===operation)viewQueues.delete(id);};
+  void operation.then(clear,clear);return operation;
+}
+function assertViewEpoch(id,epoch) {if(quitting || (viewEpochs.get(id) ?? 0)!==epoch)throw new Error('工具打开已取消。');}
+async function loadView(id, settings, epoch) {
   const plugin = await manager.get(id); if (!plugin.enabled || plugin.missing.length) throw new Error('插件已停用或缺少依赖。');
+  assertViewEpoch(id,epoch);
   if (!views.has(id)) {
     let ses = pluginSessions.get(id);
     if (!ses) {
       ses = session.fromPartition('persist:commerce-' + id);
       ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); ses.setPermissionCheckHandler(() => false);
+      // HTTP interception alone does not cover WebRTC sockets. Require the
+      // browser network stack to use an unreachable proxy, including loopback;
+      // local schemes still resolve through the identity-bound handlers below.
+      await ses.setProxy({mode:'fixed_servers',proxyRules:'socks5://127.0.0.1:0',proxyBypassRules:'<-loopback>'});
+      await ses.closeAllConnections();
+      for (const target of ['https://example.com','http://127.0.0.1','http://[::1]']) {
+        if (await ses.resolveProxy(target) !== 'SOCKS5 127.0.0.1:0') throw new Error('插件网络隔离不可用。');
+      }
       // Register in each storage partition explicitly. A scheme being handled
       // elsewhere does not install an identity-bound handler in this session.
-      ses.protocol.handle('commerce-plugin', request => { console.log('Plugin resource request:', id, new URL(request.url).pathname); return servePlugin(request, id); });
+      ses.protocol.handle('commerce-plugin', request => servePlugin(request, id));
       ses.webRequest.onBeforeRequest((details, callback) => { const url = new URL(details.url); const cancel = !(['data:', 'blob:'].includes(url.protocol) || url.protocol === 'commerce-plugin:' && url.hostname === id); if(cancel)console.log('Plugin request blocked:',id,url.origin); callback({ cancel }); });
-      ses.on('will-download', async (event, item) => { console.log('Plugin download:', id, item.getFilename(), item.getMimeType()); item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
+      ses.on('will-download', async (event, item) => { item.pause(); try { const current = await manager.get(id); if (!current.enabled || !current.permissions.files) { item.cancel(); return; } const result = await dialog.showSaveDialog(window, { defaultPath: path.basename(item.getFilename()) }); if (result.canceled) item.cancel(); else { item.setSavePath(result.filePath); item.resume(); } } catch (error) { console.error('Plugin download failed:', id, error.message); item.cancel(); } });
       pluginSessions.set(id, ses);
     }
-    const view = new WebContentsView({ webPreferences: { session: ses, preload: path.join(root, 'desktop/plugin-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, additionalArguments: ['--commerce-plugin=' + id] } });
+    assertViewEpoch(id,epoch);
+    const view = new WebContentsView({ webPreferences: { session: ses, preload: path.join(root, 'desktop/plugin-preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck:false, additionalArguments: ['--commerce-plugin=' + id] } });
+    view.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    view.webContents.on('will-navigate', (event, url) => { console.log('Plugin navigation:', id, new URL(url).origin); if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
+    view.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('commerce-plugin://' + id + '/')) event.preventDefault(); });
     view.webContents.on('will-attach-webview', event => event.preventDefault());
     view.webContents.on('did-fail-load', (_event, code, description) => console.error('Plugin view failed:', id, code, description));
-    view.webContents.on('did-stop-loading', () => console.log('Plugin loading stopped:', id, view.webContents.getURL()));
     view.webContents.on('render-process-gone', (_event, details) => console.error('Plugin renderer gone:', id, details));
     // Create the native view with a real viewport before navigation. Inactive
     // tools stay hidden until the shell supplies their final surface bounds.
@@ -84,6 +103,7 @@ async function openView(id, settings = false) {
     try { await view.webContents.loadURL('commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui)); }
     catch (e) { await closeView(id); throw e; }
   }
+  assertViewEpoch(id,epoch);
   const destination = 'commerce-plugin://' + id + '/' + (settings ? plugin.settings?.entry || plugin.ui : plugin.ui);
   if (views.get(id).webContents.getURL() !== destination) await views.get(id).webContents.loadURL(destination);
   hideViews(); visible = id; return sanitizePlugin(plugin);

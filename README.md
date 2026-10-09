@@ -4,6 +4,8 @@ Electron + DeepSeek Harness 的电商插件服务统一入口。用户通过工�
 
 v0.2.0 是当前开发目标，正式签名与发布验收尚未完成。旧版下载与更新清单按用户决定移除，旧用户需手动安装新底座。
 
+支持 macOS 14+ Apple Silicon 和 Windows 10+ x64。
+
 - [最终目标任务书](docs/commerce-plugin-platform-taskbook.md)
 - [实现状态和验收证据](docs/implementation-status.md)
 - [开发、测试与发布](docs/release-guide.md)

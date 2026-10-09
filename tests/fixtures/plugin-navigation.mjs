@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {execFileSync} from 'node:child_process';
 import {manager,workers} from '../../desktop/main.mjs';
+import {assertRendererNetworkBlocked} from './renderer-network-probe.mjs';
 const directory=process.argv.find(arg=>arg.startsWith('--navigation-fixtures='))?.slice('--navigation-fixtures='.length);
 app.on('will-quit',()=>{if(process.exitCode)app.exit(process.exitCode);});
 app.on('child-process-gone',(_event,details)=>console.error('Child process gone:',details));
@@ -36,10 +37,13 @@ try {
   await manager.install(await readFile(path.join(directory,name+'.ecplugin')));
   runtimeAccess('installed '+name);
   await invoke('plugins.enable',{id:'local.'+name,enabled:true});
-  await invoke('view.open',{id:'local.'+name});
-  const view=webContents.getAllWebContents().find(contents=>contents.getURL().startsWith('commerce-plugin://local.'+name+'/'));
+  await Promise.all([invoke('view.open',{id:'local.'+name}),invoke('view.open',{id:'local.'+name})]);
+  const contexts=webContents.getAllWebContents().filter(contents=>contents.getURL().startsWith('commerce-plugin://local.'+name+'/'));
+  assert.equal(contexts.length,1,'concurrent opens must share one tool context');
+  const view=contexts[0];
   assert.ok(view,'the plugin must commit its own document');
   assert.equal(await view.executeJavaScript('typeof require'),'undefined');
+  if(name === 'navigation-native') await assertRendererNetworkBlocked((fn,args)=>view.executeJavaScript('('+fn.toString()+')('+JSON.stringify(args)+')'));
   await view.executeJavaScript("document.querySelector('#run').click()");
   for(;;) {
    const result=await view.executeJavaScript("document.querySelector('#result').textContent");
