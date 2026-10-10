@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { FileBroker, NetworkBroker } from '../../desktop/brokers.mjs';
@@ -22,6 +22,12 @@ test('closing a tool invalidates in-flight file creation and restart removes orp
     const filename = (await files.get(plugin, item.token)).filename;
     const restarted = new FileBroker(root, {}); await restarted.initialize();
     await assert.rejects(access(filename));
+    const selected = path.join(root, 'selected.png');
+    await mkdir(root);
+    await writeFile(selected, 'image');
+    restarted.dialog = { showOpenDialog: async () => { await restarted.revoke(plugin.id); return { canceled: false, filePaths: [selected] }; } };
+    await assert.rejects(restarted.pick(plugin), /失效/);
+    assert.equal(restarted.tokens.size, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

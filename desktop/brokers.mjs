@@ -6,10 +6,10 @@ import { allowedNetwork } from './security.mjs';
 export class FileBroker {
   constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); this.epochs = new Map(); }
   async initialize() { await rm(this.root, { recursive: true, force: true }); }
-  async create(plugin, bytes, name, mime = 'application/octet-stream') {
+  async create(plugin, bytes, name, mime = 'application/octet-stream', epoch = this.epochs.get(plugin.id) ?? 0) {
     if (!plugin.permissions.files) throw new Error('插件没有文件权限。');
     if (bytes.length > 64 * 1024 * 1024) throw new Error('文件内容过大。');
-    const epoch = this.epochs.get(plugin.id) ?? 0;
+    if ((this.epochs.get(plugin.id) ?? 0) !== epoch) throw new Error('文件未授权或已失效。');
     const dir = path.join(this.root, plugin.id); await mkdir(dir, { recursive: true, mode: 0o700 });
     const token = randomUUID(), filename = path.join(await realpath(dir), token); await writeFile(filename, bytes, { mode: 0o600 });
     if ((this.epochs.get(plugin.id) ?? 0) !== epoch) { await rm(filename, { force: true }); throw new Error('文件未授权或已失效。'); }
@@ -24,13 +24,14 @@ export class FileBroker {
   }
   async pick(plugin, options = {}) {
     if (!plugin.permissions.files) throw new Error('插件没有文件权限。');
+    const epoch = this.epochs.get(plugin.id) ?? 0;
     const extensions = (options.extensions ?? []).filter(s => typeof s === 'string' && /^[a-z0-9]{1,8}$/.test(s)).slice(0, 12);
     const result = await this.dialog.showOpenDialog({ title: plugin.title + ' · 选择文件', properties: ['openFile'], filters: extensions.length ? [{ name: '支持的文件', extensions }] : [] });
     if (result.canceled) return null;
     const filename = result.filePaths[0]; const info = await lstat(filename);
     if (!info.isFile() || info.size > 25 * 1024 * 1024) throw new Error('请选择不超过 25 MB 的文件。');
     const ext = path.extname(filename).toLowerCase();
-    return this.create(plugin, await readFile(filename), path.basename(filename), ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf' })[ext]);
+    return this.create(plugin, await readFile(filename), path.basename(filename), ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf' })[ext], epoch);
   }
   async read(plugin, token) { const item = await this.get(plugin, token); return { data: (await readFile(item.filename)).toString('base64'), mime: item.mime }; }
   async url(plugin, token) {
@@ -45,7 +46,7 @@ export class FileBroker {
   async save(plugin, token, filename) {
     const item = await this.get(plugin, token);
     const result = await this.dialog.showSaveDialog({ title: plugin.title + ' · 保存文件', defaultPath: path.basename(filename || item.name) });
-    if (result.canceled) return false; await copyFile(item.filename, result.filePath); return true;
+    if (result.canceled) return false; await this.get(plugin, token); await copyFile(item.filename, result.filePath); return true;
   }
   async revoke(id) { this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1); const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
 }
