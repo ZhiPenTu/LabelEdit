@@ -19,7 +19,7 @@ test('release checks select the archive with a fixed repository URL and verified
   assert.equal(requested, 'https://api.github.com/repos/ZhiPenTu/qingzuo-desktop/releases/latest');
   assert.deepEqual(result, { status: 'available', version: '0.2.4', notes: release.body, artifact: { url: 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v0.2.4/CommerceTools-0.2.4-mac-arm64.zip', size: 10, sha256: assets[0].digest.slice(7) } });
   assert.equal((await checkGitHubRelease('0.2.0', { ...options(), platform: 'win32', arch: 'x64' })).status, 'available');
-  for (const version of ['0.2.4', '0.2.5', '0.2.6', '0.2.7', '0.2.8']) assert.deepEqual(await checkGitHubRelease(version, options()), { status: 'current', version: null, notes: '' });
+  for (const version of ['0.2.4', '0.2.5', '0.2.6', '0.2.7', '0.2.8', '0.2.9']) assert.deepEqual(await checkGitHubRelease(version, options()), { status: 'current', version: null, notes: '' });
 });
 
 test('release checks reject incomplete, unverified or malformed releases and report network failures', async () => {

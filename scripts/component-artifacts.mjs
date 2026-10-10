@@ -33,7 +33,8 @@ export async function buildComponentArtifacts({ bundle, output, version, private
         child.stdin.end([...payloads.keys()].sort().join('\n') + '\n');
       });
       else await writeFile(archive, new AdmZip().toBuffer());
-      const artifact = { url: `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/${name}`, size: (await stat(archive)).size, sha256: await fileDigest(archive) };
+      const repo = process.env.GITHUB_REPOSITORY || 'ZhiPenTu/qingzuo-desktop';
+      const artifact = { url: `https://github.com/${repo}/releases/download/v${version}/${name}`, size: (await stat(archive)).size, sha256: await fileDigest(archive) };
       await copyFile(archive, path.join(output, name)); components.push({ id, artifact });
     } finally { await rm(workspace, { recursive: true, force: true }); }
   }

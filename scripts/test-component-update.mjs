@@ -32,7 +32,8 @@ try {
   await mkdir(path.join(installed, legacyDirectory), { recursive: true });
   await writeFile(path.join(installed, legacyDirectory, 'old-runtime'), 'obsolete bundled plugin');
   const manifestName = componentManifestName(version), bytes = await readFile(path.join(output, manifestName));
-  const manifestArtifact = { url: `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/${manifestName}`, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const repo = process.env.GITHUB_REPOSITORY || 'ZhiPenTu/qingzuo-desktop';
+  const manifestArtifact = { url: `https://github.com/${repo}/releases/download/v${version}/${manifestName}`, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
   const requests = [], states = [];
   server = createServer(async (req, res) => {
     const filename = path.join(output, path.basename(req.url)); requests.push(path.basename(req.url));
