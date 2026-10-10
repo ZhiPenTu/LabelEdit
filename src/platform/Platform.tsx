@@ -15,9 +15,9 @@ import workspaceArt from '@/assets/workspace.png';
 import { version } from '../../package.json';
 import { UpdateCard, type UpdateState } from './UpdateCard';
 type Page = 'home' | 'market' | 'plugins' | 'settings' | 'updates';
-interface Status { version: string; kernel: { ready: boolean; error: string | null; version: string; systems: { id: string; title: string; protected: boolean }[] }; plugins: Plugin[]; tabs: string[]; update: UpdateState }
+interface Status { version: string; kernel: { ready: boolean; error: string | null; version: string; systems: { id: string; title: string; protected: boolean }[] }; plugins: Plugin[]; tabs: string[]; update: UpdateState; migration?: { id: string; title: string; enabled: boolean } | null }
 const navigation = [{ id: 'home', title: '工具中心', icon: Boxes }, { id: 'market', title: '插件市场', icon: Store }, { id: 'plugins', title: '插件管理', icon: Puzzle }, { id: 'settings', title: '设置', icon: Settings }, { id: 'updates', title: '更新', icon: RefreshCw }] as const;
-const preview: Status = { version, kernel: { ready: false, error: null, version: '0.2.1-alpha.1', systems: [] }, plugins: [{ id: 'official.labeledit', title: 'LabelEdit', description: '本地 PDF 标签编辑、文字识别与导出', category: '标签与文档', version: '0.1.1', enabled: true, source: 'bundled', local: true, missing: [] }], tabs: [], update: { status: 'idle', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0 } };
+const preview: Status = { version, kernel: { ready: false, error: null, version: '0.2.1-alpha.1', systems: [] }, plugins: [], tabs: [], update: { status: 'idle', version: null, notes: '', error: null, progress: 0, transferred: 0, total: 0 } };
 const pageCopy = {
   home: ['让日常工作，轻一点。', '把顺手的工具放在一起，专注每一次创作。'],
   market: ['让工作台，多一点可能。', '找到适合你的工具，按需安装，独立更新。'],
@@ -90,6 +90,7 @@ export default function Platform() {
       <header className="commerce-topbar"><div className="commerce-breadcrumb"><span>工作台</span><ChevronRight /><strong>{title}</strong></div><Button variant="outline" disabled={!desktop || busy} onClick={() => act('plugins.import')}><Upload data-icon="inline-start" />导入插件</Button></header>
       {status?.tabs.length ? <div className="commerce-tool-tabs" role="tablist" aria-label="已打开的工具">{status.tabs.map(id => <div key={id} className="commerce-tool-tab"><Button role="tab" aria-selected={page === id} variant={page === id ? 'secondary' : 'ghost'} size="sm" onClick={() => void navigate(id)}>{plugins.find(p => p.id === id)?.title ?? id}</Button><Button variant="ghost" size="icon-sm" aria-label="关闭工具" onClick={() => { void run('view.close', { id }).then(() => { if (page === id) setPage('home'); }).catch(() => {}); }}><X /></Button></div>)}</div> : null}
       {error ? <Alert variant="destructive" className="commerce-alert"><AlertCircle /><AlertDescription>{error}</AlertDescription></Alert> : null}
+      {status?.migration ? <Alert className="commerce-alert"><Puzzle /><AlertDescription>LabelEdit 已独立发布。原有配置和文件保留，重新安装需要联网下载一次。<Button variant="outline" size="sm" disabled={busy} onClick={() => act('market.install', { id: status.migration!.id })}>恢复 LabelEdit</Button><Button variant="ghost" size="sm" onClick={() => act('migration.dismiss')}>稍后从市场安装</Button></AlertDescription></Alert> : null}
       {status?.kernel.error ? <Alert variant="destructive" className="commerce-alert"><AlertCircle /><AlertDescription>{status.kernel.error}<Button variant="outline" size="sm" onClick={() => act('kernel.retry')}>重新启动内核</Button></AlertDescription></Alert> : null}
       {!status ? <main className="commerce-content"><Skeleton className="h-12 w-64" /><Skeleton className="h-64 w-full" /></main> : shellPage ? <main className="commerce-content"><div className="commerce-content-inner">
         <div className="commerce-heading"><h1>{copy[0]}</h1><p>{copy[1]}</p></div>

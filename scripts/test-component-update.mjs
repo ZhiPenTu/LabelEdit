@@ -18,7 +18,8 @@ try {
   let output, publicKey;
   if (process.argv.includes('--release-artifacts')) {
     output = path.resolve('release/components');
-    publicKey = JSON.parse(await readFile('resources/generated/market.json', 'utf8')).publicKey;
+    const config = JSON.parse(await readFile('resources/generated/market.json', 'utf8'));
+    publicKey = config.updatePublicKey || config.publicKey;
   } else {
     const keys = generateKeyPairSync('ed25519'); publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' });
     output = path.join(temporary, 'artifacts');
@@ -56,7 +57,7 @@ try {
     child.once('error', reject); child.once('exit', code => code === 0 ? resolve() : reject(new Error('重建应用的离线回归失败。')));
   });
   const metrics = { version, source: 'local HTTP component artifacts', manifestBytes: bytes.length, downloadedArchiveBytes: states.at(-1).transferred,
-    totalHTTPPayloadBytes: bytes.length + states.at(-1).transferred, reusedInstalledBytes: states.at(-1).reusedBytes, requests, codesign: 'passed', harness: 'passed', offlineOCR: 'passed', pdfExport: 'passed' };
+    totalHTTPPayloadBytes: bytes.length + states.at(-1).transferred, reusedInstalledBytes: states.at(-1).reusedBytes, requests, codesign: 'passed', harness: 'passed', purePlatform: 'passed' };
   await mkdir('output/update-validation', { recursive: true });
   await writeFile('output/update-validation/components.json', JSON.stringify(metrics, null, 2));
   console.log(JSON.stringify(metrics));

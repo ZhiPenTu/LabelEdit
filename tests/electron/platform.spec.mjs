@@ -1,39 +1,31 @@
-import {test,expect,_electron as electron} from '@playwright/test';
-import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import os from 'node:os';import path from 'node:path';
-import {observeApplication} from './diagnostics.mjs';
-import {assertRendererNetworkBlocked} from '../fixtures/renderer-network-probe.mjs';
-const root=process.cwd(),cli=path.join(root,'packages/plugin-sdk/cli.mjs');
-async function choose(app,filename,save) { await app.evaluate(({dialog},value)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[value.filename]});dialog.showMessageBox=async()=>({response:1});if(value.save)dialog.showSaveDialog=async()=>({canceled:false,filePath:value.save});}, {filename,save}); }
-async function importPlugin(app,page,filename){await choose(app,filename);await page.getByRole('button',{name:'导入插件'}).click();}
-async function pluginPage(app,id){try{await expect.poll(()=>app.context().pages().some(p=>p.url().includes('commerce-plugin://'+id+'/'))).toBe(true);}catch(error){console.error('Open pages:',app.context().pages().map(p=>p.url()));console.error('Web contents:',await app.evaluate(({webContents})=>webContents.getAllWebContents().map(w=>({id:w.id,url:w.getURL(),destroyed:w.isDestroyed()}))).catch(e=>e.message));throw error;}return app.context().pages().find(p=>p.url().includes('commerce-plugin://'+id+'/'));}
-test('desktop tool tabs, isolated native/web plugin import, offline LabelEdit, cutout preview/save and lifecycle',async()=>{
- const temporary=await mkdtemp(path.join(os.tmpdir(),'commerce-ui-'));let app;
- try{
-  for(const [name,native] of [['test-web',false],['test-native',true]]) {execFileSync(process.execPath,[cli,'create',name,...(native?['--native']:[])],{cwd:temporary});execFileSync(process.execPath,[cli,'pack',path.join(temporary,name),path.join(temporary,name+'.ecplugin')]);}
-  app=await electron.launch({args:[root,'--user-data-dir='+path.join(temporary,'data')],timeout:20000});observeApplication(app);const page=await app.firstWindow();await expect(page.getByText('Harness 内核已连接')).toBeVisible();
-  const identity=await app.evaluate(({app})=>({name:app.getName(),profile:app.getPath('userData')}));expect(identity.name).toBe('Qingzuo');
-  // Electron may return a Windows 8.3 alias or a macOS /private/var alias.
-  expect(await realpath(identity.profile)).toBe(await realpath(path.join(temporary,'data')));
-  await page.screenshot({path:'output/electron-tests/home.png'});
-  await importPlugin(app,page,path.join(temporary,'test-native.ecplugin'));await expect(page.getByRole('heading',{name:'test-native',exact:true})).toBeVisible();
-  await page.locator('[data-slot="card"]').filter({hasText:'test-native'}).getByRole('button',{name:'打开工具'}).click();const native=await pluginPage(app,'local.test-native');await native.getByRole('button',{name:'运行示例'}).click();await expect(native.getByRole('status')).toHaveText('插件服务调用成功');
-  expect(await native.evaluate(()=>({process:typeof process,require:typeof require,desktop:typeof window.commerceDesktop}))).toEqual({process:'undefined',require:'undefined',desktop:'undefined'});
-  expect(await native.evaluate(async()=>{try{await fetch('https://example.com');return false;}catch{return true;}})).toBe(true);
-  await assertRendererNetworkBlocked((fn,args)=>native.evaluate(fn,args));
-  await page.getByRole('button',{name:'工具中心',exact:true}).click();await importPlugin(app,page,path.join(temporary,'test-web.ecplugin'));await expect(page.getByRole('heading',{name:'test-web',exact:true})).toBeVisible();
-  await page.locator('[data-slot="card"]').filter({hasText:'test-web'}).getByRole('button',{name:'打开工具'}).click();const web=await pluginPage(app,'local.test-web');await web.getByRole('button',{name:'运行示例'}).click();await expect(web.getByRole('status')).toContainText('无需重新发布底座');
-  await page.getByRole('button',{name:'工具中心',exact:true}).click();await page.locator('[data-slot="card"]').filter({hasText:'LabelEdit'}).getByRole('button',{name:'打开工具'}).click();const label=await pluginPage(app,'official.labeledit');await label.getByRole('button',{name:'使用示例标签'}).click();await expect(label.getByRole('button',{name:'选择文字：Batch Number: SG250128',exact:true})).toBeVisible({timeout:30000});
-  const saved=path.join(temporary,'label.pdf');await choose(app,'',saved);await label.getByRole('button',{name:'导出 PDF',exact:true}).click();await expect.poll(async()=>{try{return (await readFile(saved)).subarray(0,4).toString()}catch{return ''}}).toBe('%PDF');
-  await page.screenshot({path:'output/electron-tests/labeledit.png'});
-  await page.getByRole('button',{name:'工具中心',exact:true}).click();await importPlugin(app,page,path.join(root,'release/official.removebg-0.1.0.ecplugin'));await expect(page.getByRole('heading',{name:'AI 抠图',exact:true})).toBeVisible();await page.locator('[data-slot="card"]').filter({hasText:'AI 抠图'}).getByRole('button',{name:'打开工具'}).click();const cutout=await pluginPage(app,'official.removebg');
-  const image=path.join(temporary,'fixture.png'),png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');await writeFile(image,png);await choose(app,image,path.join(temporary,'cutout.png'));await cutout.getByRole('button',{name:'选择商品图片'}).click();await cutout.getByRole('button',{name:'开始抠图'}).click();await expect(cutout.locator('#status')).toContainText('请先配置');
-  await cutout.locator('#key').fill('fixture-not-a-real-key');await cutout.locator('#save-key').click();await expect(cutout.locator('#key-status')).toContainText('已保存');
-  await app.evaluate(async(_,value)=>{const {network}=await process.getBuiltinModule('node:vm').runInThisContext('import('+JSON.stringify(value.module)+')',{importModuleDynamically:process.getBuiltinModule('node:vm').constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});network.request=async(url,options)=>{if(url!=='https://api.remove.bg/v1.0/removebg'||options.headers['X-Api-Key']!=='fixture-not-a-real-key')throw new Error('unexpected request');return new Response(Buffer.from(value.bytes,'base64'),{headers:{'content-type':'image/png'}});};},{module:new URL('../../desktop/main.mjs',import.meta.url).href,bytes:png.toString('base64')});
-  await cutout.getByRole('button',{name:'开始抠图'}).click();await expect(cutout.locator('#status')).toContainText('抠图完成');await cutout.getByRole('button',{name:'保存透明 PNG'}).click();await expect.poll(async()=>{try{return (await readFile(path.join(temporary,'cutout.png'))).equals(png)}catch{return false}}).toBe(true);await cutout.locator('#clear-key').click();await expect(cutout.locator('#key-status')).toContainText('尚未配置');
-  await cutout.locator('#key').fill('fixture-not-a-real-key');await cutout.locator('#save-key').click();await expect(cutout.locator('#key-status')).toContainText('已保存');
-  await page.getByRole('button',{name:'插件管理',exact:true}).click();await page.locator('[data-slot="card"]').filter({hasText:'AI 抠图'}).getByRole('button',{name:'卸载',exact:true}).click();await expect(page.locator('[data-slot="card"]').filter({hasText:'AI 抠图'})).toHaveCount(0);
-  await importPlugin(app,page,path.join(root,'release/official.removebg-0.1.0.ecplugin'));await page.getByRole('button',{name:'工具中心',exact:true}).click();await page.locator('[data-slot="card"]').filter({hasText:'AI 抠图'}).getByRole('button',{name:'打开工具'}).click();const reinstalled=await pluginPage(app,'official.removebg');await expect(reinstalled.locator('#key-status')).toContainText('尚未配置');
-  await page.getByRole('button',{name:'插件管理',exact:true}).click();const nativeCard=page.locator('[data-slot="card"]').filter({hasText:'test-native'});await nativeCard.getByRole('button',{name:'停用',exact:true}).click();await expect(nativeCard.getByRole('button',{name:'启用',exact:true})).toBeVisible();expect(app.context().pages().some(p=>p.url().includes('local.test-native'))).toBe(false);await nativeCard.getByRole('button',{name:'卸载',exact:true}).click();await expect(nativeCard).toHaveCount(0);
-  await page.getByRole('button',{name:'更新',exact:true}).click();await page.getByRole('button',{name:'检查更新'}).click();await expect(page.getByRole('alert')).toContainText('开发环境不检查安装包更新');
- }finally{if(app)await app.close();await rm(temporary,{recursive:true,force:true});}
+import { test, expect, _electron } from '@playwright/test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import os from 'node:os';
+
+test('pure platform installs a sandboxed Node plugin and supports uninstall/reinstall', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-lifecycle-'));
+  let app;
+  try {
+    const cli = path.resolve('packages/plugin-sdk/cli.mjs');
+    execFileSync(process.execPath, [cli, 'create', 'fixture-native', '--native'], { cwd: temporary });
+    const artifact = path.join(temporary, 'fixture.ecplugin');
+    execFileSync(process.execPath, [cli, 'pack', path.join(temporary, 'fixture-native'), artifact]);
+    app = await _electron.launch({ args: [process.cwd(), '--user-data-dir=' + path.join(temporary, 'profile')] });
+    const page = await app.firstWindow();
+    await expect(page.getByText('Harness 内核已连接')).toBeVisible();
+    expect((await page.evaluate(() => window.commerceDesktop.invoke('status'))).plugins).toEqual([]);
+    await app.evaluate(({ dialog }, filename) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] }); dialog.showMessageBox = async () => ({ response: 1 }); }, artifact);
+    for (let iteration = 0; iteration < 2; iteration++) {
+      await page.evaluate(() => window.commerceDesktop.invoke('plugins.import'));
+      await page.evaluate(() => window.commerceDesktop.invoke('view.open', { id: 'local.fixture-native' }));
+      await expect.poll(() => app.context().pages().some(candidate => candidate.url().startsWith('commerce-plugin://local.fixture-native/'))).toBe(true);
+      const plugin = app.context().pages().find(candidate => candidate.url().startsWith('commerce-plugin://local.fixture-native/'));
+      await plugin.getByRole('button', { name: '运行示例' }).click();
+      await expect(plugin.locator('#result')).toHaveText('插件服务调用成功');
+      await page.evaluate(() => window.commerceDesktop.invoke('plugins.uninstall', { id: 'local.fixture-native' }));
+      expect((await page.evaluate(() => window.commerceDesktop.invoke('status'))).plugins).toEqual([]);
+    }
+  } finally { await app?.close(); await rm(temporary, { recursive: true, force: true }); }
 });

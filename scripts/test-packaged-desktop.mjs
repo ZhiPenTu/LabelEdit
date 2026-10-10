@@ -32,16 +32,12 @@ try {
   await page.getByRole('button', { name: '工具中心', exact: true }).click();
   await mkdir('output/electron-tests', { recursive: true });
   await page.screenshot({ path: 'output/electron-tests/packaged-home.png' });
-  await page.locator('[data-slot="card"]').filter({ hasText: 'LabelEdit' }).getByRole('button', { name: '打开工具' }).click();
-  await expect.poll(() => app.context().pages().some(p => p.url().startsWith('commerce-plugin://official.labeledit/'))).toBe(true);
-  const label = app.context().pages().find(p => p.url().startsWith('commerce-plugin://official.labeledit/'));
-  await label.getByRole('button', { name: '使用示例标签' }).click();
-  await expect(label.getByRole('button', { name: '选择文字：Batch Number: SG250128', exact: true })).toBeVisible({ timeout: 30000 });
-  const output = path.join(temporary, 'result.pdf');
-  await app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }); }, output);
-  await label.getByRole('button', { name: '导出 PDF', exact: true }).click();
-  await expect.poll(async () => { try { return (await readFile(output)).subarray(0, 4).toString(); } catch { return ''; } }).toBe('%PDF');
-  console.log('Standalone installed application outside the checkout: own UI, Harness kernel, sandboxed offline OCR and saved PDF passed.');
+  expect(status.plugins).toEqual([]);
+  await expect(page.getByText('这里还没有工具')).toBeVisible();
+  const { readdir } = await import('node:fs/promises');
+  const resources = process.platform === 'darwin' ? path.join(installedRoot, 'Contents/Resources/commerce') : path.join(installedRoot, 'resources/commerce');
+  expect(await readdir(resources)).not.toContain('plugins');
+  console.log('Standalone pure platform: seven Harness services, empty tool center and no bundled business plugins passed.');
 } finally {
   if (app) await app.close();
   await rm(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

@@ -29,3 +29,37 @@ test('generic declared online services use scoped credentials and return bounded
  const p={...plugin,permissions:{...plugin.permissions,network:['https://tools.example.com']}},broker=new NetworkBroker(null,{get:async()=> 'fixture'},async(url,request)=>{assert.equal(url,'https://tools.example.com/task');assert.equal(request.headers.Authorization,'Bearer fixture');assert.equal(request.body,'{"input":1}');return new Response('{"output":2}');});
  const result=await broker.call(p,{url:'https://tools.example.com/task',method:'POST',json:{input:1},credential:'removebg'});assert.equal(result.status,200);assert.equal(Buffer.from(result.data,'base64').toString(),'{"output":2}');await assert.rejects(broker.call(p,{url:'https://tools.example.com/task',credential:'unscoped'}));
 });
+test('private resource URLs and release reject other plugin tokens', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-resource-')), files = new FileBroker(root, {});
+  try {
+    const item = await files.create(plugin, Buffer.from('image'), 'image.png', 'image/png');
+    assert.equal(await files.url(plugin, item.token), 'commerce-plugin://' + plugin.id + '/__files/' + item.token);
+    await assert.rejects(files.url({ ...plugin, id: 'local.other' }, item.token));
+    await assert.rejects(files.release({ ...plugin, id: 'local.other' }, item.token));
+    await files.release(plugin, item.token);
+    await assert.rejects(files.read(plugin, item.token));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+test('generic multipart uploads scope credentials, preserve HTTP errors and produce file tokens', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-multipart-')), files = new FileBroker(root, {});
+  let calls = 0;
+  const broker = new NetworkBroker(files, { get: async () => 'private' }, async (_url, request) => {
+    calls++;
+    assert.equal(request.headers['X-Api-Key'], 'private');
+    assert.equal(request.body.get('format'), 'png');
+    assert.equal(await request.body.get('image').text(), 'input');
+    return new Response('quota', { status: 402, headers: { 'Content-Type': 'text/plain' } });
+  });
+  try {
+    const input = await files.create(plugin, Buffer.from('input'), 'input.png', 'image/png');
+    const options = { url: 'https://api.remove.bg/v1.0/removebg', method: 'POST', credential: 'removebg', credentialHeader: 'X-Api-Key', multipart: { fields: { format: 'png' }, files: [{ field: 'image', token: input.token }] }, responseType: 'file' };
+    const result = await broker.call(plugin, options);
+    assert.equal(result.status, 402);
+    assert.equal(Buffer.from((await files.read(plugin, result.file.token)).data, 'base64').toString(), 'quota');
+    await assert.rejects(broker.call(plugin, { ...options, json: {} }));
+    await assert.rejects(broker.call({ ...plugin, id: 'local.other' }, options));
+    const oversized = await files.create(plugin, Buffer.alloc(26 * 1024 ** 2), 'large', 'application/octet-stream');
+    await assert.rejects(broker.call(plugin, { ...options, multipart: { files: [{ field: 'image', token: oversized.token }] } }), /25 MB/);
+    assert.equal(calls, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

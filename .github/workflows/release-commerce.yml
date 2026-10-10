@@ -5,11 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '验收版本，需与 package.json 一致（例如 0.2.0）；不会公开发布'
+        description: '验收版本，需与 package.json 一致；不会公开发布'
         required: true
         type: string
       signing:
-        description: '桌面签名模式；unsigned 无需 Apple/Windows 证书，插件签名始终必需'
+        description: '桌面签名模式'
         type: choice
         default: unsigned
         options: [unsigned, signed]
@@ -26,11 +26,11 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
-      PYTHONUTF8: '1'
       COMMERCE_VALIDATION_VERSION: ${{ inputs.version }}
       COMMERCE_DESKTOP_SIGNING: ${{ inputs.signing || vars.COMMERCE_DESKTOP_SIGNING || 'unsigned' }}
       COMMERCE_PLUGIN_SIGNING_KEY: ${{ secrets.COMMERCE_PLUGIN_SIGNING_KEY }}
       COMMERCE_PLUGIN_PUBLIC_KEY: ${{ vars.COMMERCE_PLUGIN_PUBLIC_KEY }}
+      COMMERCE_MARKET_PUBLIC_KEY: ${{ vars.COMMERCE_MARKET_PUBLIC_KEY }}
       CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -43,70 +43,43 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Require release configuration and plugin signing
-        run: node scripts/release-preflight.mjs
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
-        if: runner.os == 'macOS'
-        with:
-          version: '0.11.6'
-          enable-cache: false
-      - name: Select framework-free macOS packaging Python
-        if: runner.os == 'macOS'
-        run: |
-          uv python install 3.12.11
-          COMMERCE_PACKAGING_PYTHON=$(uv python find --managed-python 3.12.11)
-          echo "COMMERCE_PACKAGING_PYTHON=$COMMERCE_PACKAGING_PYTHON" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
-      - run: |
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: 'native/sandbox -> target'
+      - name: Require release configuration
+        run: node scripts/release-preflight.mjs
+      - name: Pure platform checks
+        run: |
           npm ci --ignore-scripts
           node node_modules/electron/install.js
           npm run build:harness-native
-          python -m pip install -r requirements-dev.txt
-          python -m backend.ocr_service
-          python -m pytest -q
           npm test
           npm run build
           npm run build:sandbox
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            "$COMMERCE_PACKAGING_PYTHON" scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
-          else
-            python scripts/build_backend.py --distpath resources/generated/plugins/official.labeledit/backend
-          fi
           npm run platform:prepare
           node scripts/verify-macos-runtime.mjs
           npm run test:platform
           node scripts/test-plugin-navigation.mjs
-          npx playwright test --config tests/electron/playwright.config.mjs
-      - name: Build installers
+          npm run test:desktop
+      - name: Build standalone installers
         run: |
           node scripts/package-desktop.mjs
           node scripts/test-packaged-desktop.mjs
       - name: Verify production signatures
         if: ${{ env.COMMERCE_DESKTOP_SIGNING == 'signed' }}
         run: node scripts/verify-signatures.mjs
-      - name: Build independently signed plugin artifacts
-        run: node scripts/market-artifacts.mjs
       - name: Build signed macOS update components
         if: runner.os == 'macOS'
-        run: node scripts/component-artifacts.mjs
-      - name: Verify reconstructed macOS application offline
-        if: runner.os == 'macOS'
-        run: node scripts/test-component-update.mjs --release-artifacts
+        run: |
+          node scripts/component-artifacts.mjs
+          node scripts/test-component-update.mjs --release-artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: Commerce-${{ runner.os }}
           path: |
-            release/desktop/*.dmg
-            release/desktop/*.zip
-            release/desktop/*.exe
-            release/desktop/*.blockmap
-            release/desktop/latest*.yml
-            release/market/*
-            release/components/*
+            release/desktop/
+            release/components/
   publish:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     needs: package
@@ -117,19 +90,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           pattern: Commerce-*
           path: release
           merge-multiple: true
-      - name: Merge platform catalog
-        run: |
-          npm pack --workspace @commerce/plugin-sdk --pack-destination release/market
-          node scripts/merge-market.mjs release/market/catalog-*.json
       - name: Publish validated release
-        shell: bash
-        run: |
-          gh release create "$GITHUB_REF_NAME" release/desktop/* release/components/* release/market/*.ecplugin release/market/*.tgz release/commerce-market.json --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+        run: gh release create "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.exe release/desktop/*.blockmap release/desktop/latest*.yml release/components/* --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
