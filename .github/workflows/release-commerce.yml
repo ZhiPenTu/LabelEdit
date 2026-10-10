@@ -66,6 +66,7 @@ jobs:
         run: |
           node scripts/package-desktop.mjs
           node scripts/test-packaged-desktop.mjs
+          node scripts/test-windows-installer.mjs
       - name: Verify production signatures
         if: ${{ env.COMMERCE_DESKTOP_SIGNING == 'signed' }}
         run: node scripts/verify-signatures.mjs

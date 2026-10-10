@@ -10,6 +10,21 @@ test('file tokens are private per plugin and become invalid on disposal', async 
   try { const file = await files.create(plugin, Buffer.from('test'), 'a.png', 'image/png'); assert.equal((await files.read(plugin, file.token)).data, Buffer.from('test').toString('base64')); await assert.rejects(files.read({ ...plugin, id: 'local.b' }, file.token)); await files.revoke(plugin.id); await assert.rejects(files.read(plugin, file.token)); }
   finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('generic response limits distinguish ordinary and private file responses without retrying', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-limits-')), files = new FileBroker(root, {});
+  let calls = 0, length = 9 * 1024 ** 2;
+  const broker = new NetworkBroker(files, {}, async () => { calls++; return new Response(Buffer.alloc(length)); });
+  try {
+    const options = { url: 'https://api.remove.bg/data' };
+    await assert.rejects(broker.call(plugin, options));
+    const result = await broker.call(plugin, { ...options, responseType: 'file' });
+    assert.equal(result.file.size, length);
+    length = 65 * 1024 ** 2;
+    await assert.rejects(broker.call(plugin, { ...options, responseType: 'file' }));
+    assert.equal(calls, 3);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 test('network broker validates endpoint, isolates secrets, saves PNG and never retries failures', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'commerce-net-')); const files = new FileBroker(root, {}); const file = await files.create(plugin, Buffer.from('image'), 'a.png', 'image/png'); let calls = 0;
   const opts = { url: 'https://api.remove.bg/v1.0/removebg', fileToken: file.token, credential: 'removebg' };

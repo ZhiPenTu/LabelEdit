@@ -1,6 +1,6 @@
 # 插件开发
 
-底座运行官方 Harness Profile/Bundle。第三方的界面和处理代码始终位于隔离进程；内核只加载本项目受信任的声明式 Cordis 适配器。v0.2.7 的插件 API/SDK 为 1.1.0，兼容声明 ^1.0.0 的旧插件，插件版本和底座版本独立。
+底座运行官方 Harness Profile/Bundle。第三方的界面和处理代码始终位于隔离进程；内核只加载本项目受信任的声明式 Cordis 适配器。v0.2.7 的插件 API 为 1.1.0、SDK 为 1.1.1，兼容声明 ^1.0.0 的旧插件，插件版本和底座版本独立。
 
 ## 快速创建
 
@@ -29,7 +29,7 @@ SDK 提供文件选择/读取/保存、凭据设置/状态/清除、受控网络
 
 ## 市场发布与升级
 
-业务插件在独立仓库构建、测试和发布，底座不再构建业务制品。使用 sdk-v1.1.0 Release 中的固定 npm 压缩包与 lockfile。测试辅助入口 @commerce/plugin-sdk/testing 的 launchPluginTestHost 接受 executablePath、artifactPath 和 pluginId，在独立用户目录启动指定底座制品、导入并打开插件，返回 app/page/plugin/close。开发验收依赖 @playwright/test，运行插件不需要测试依赖。
+业务插件在独立仓库构建、测试和发布，底座不再构建业务制品。使用 sdk-v1.1.1 Release 中的固定 npm 压缩包与 lockfile，API 契约仍是 1.1.0。测试辅助入口 @commerce/plugin-sdk/testing 的 launchPluginTestHost 接受 executablePath、artifactPath 和 pluginId，在独立用户目录启动指定底座制品、导入并打开插件，返回 app/page/plugin/close。开发验收依赖 @playwright/test，运行插件不需要测试依赖。
 
 API 1.1 增加 files.url(token) 与 files.release(token)。URL 只在插件自身隔离会话中有效；其他插件不能读取令牌。network.request 支持 multipart.fields 和 multipart.files（field/token），不能与 json 同时使用；上传总量最多 25 MB。responseType: file 返回 status/mime/file，普通响应返回 status/mime/data；响应上限分别为 64 MB 和 8 MB。HTTP 错误状态由插件解释，凭据注入、网络边界和取消由底座执行，失败不会自动重试。
 

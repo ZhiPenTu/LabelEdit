@@ -1,6 +1,6 @@
 # 轻作发布与独立插件
 
-底座版本 0.2.7，插件 API/SDK 1.1.0。底座发布仓库、应用标识、用户目录和 CommerceTools 制品名称保持兼容。
+底座版本 0.2.7，插件 API 1.1.0、SDK 1.1.1。底座发布仓库、应用标识、用户目录和 CommerceTools 制品名称保持兼容。
 
 ## 底座
 
@@ -14,7 +14,7 @@ macOS 新组件仅有 core、electron、dependencies，保留旧组件清单读�
 
 ## SDK 与插件
 
-sdk-v1.1.0 单独发布 commerce-plugin-sdk-1.1.0.tgz，设置 latest=false，不干扰桌面升级。独立插件用固定 Release URL 和 lockfile integrity 安装 SDK。
+sdk-v1.1.0 首次发布后，测试辅助入口的可见视图修正以 sdk-v1.1.1 发布，不覆盖原制品；运行时 API 仍为 1.1.0。两个版本设置 latest=false，不干扰桌面升级。独立插件用固定 sdk-v1.1.1 Release URL 和 lockfile integrity 安装 SDK。
 
 插件源码、Python/模型/字体、业务测试和打包在各自仓库完成。插件 CI 必须提供成功的底座验收运行 ID，从该运行下载对应平台安装制品并在真实沙箱中验收，不能借用底座源码依赖。
 
