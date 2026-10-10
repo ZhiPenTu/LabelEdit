@@ -8,7 +8,7 @@ The Harness remains 0.2.1-alpha.1. Runtime API is 1.1.0, manifestVersion remains
 
 ## Completed local acceptance
 
-- Platform: 2 frontend tests, 59 platform tests and 7 Electron acceptance tests passed. These cover signed install/update rejection, failed plugin upgrade preservation, migration, file ownership, disposal races, multipart budgets, response limits, isolated credentials, cancellation and real ASAR byte handling.
+- Platform: 2 frontend tests, 60 platform tests and 7 Electron acceptance tests passed. These cover signed install/update rejection, failed plugin upgrade preservation, migration (including postponed restoration of a disabled legacy plugin), file ownership, disposal races, multipart budgets, response limits, isolated credentials, cancellation and real ASAR byte handling.
 - Packaged pure platform: launched outside the checkout; all seven Harness services start, the tool center is empty and no bundled business plugin directory exists.
 - LabelEdit: 16 frontend tests and 11 Python tests plus 4 subtests passed. The frozen independent artifact runs in the real native sandbox, opens a PDF, performs real offline OCR, applies replacement text, renders the edited preview, exports a PDF whose extracted text contains the replacement, and invalidates replaced-document resources.
 - Legacy LabelEdit API 1.0: its actual previous artifact performs real OCR and uses the retained PDF-specific preview URL in the new pure platform.
@@ -26,7 +26,7 @@ Each plugin CI downloads an explicit successful platform run ID through the SDK 
 - LabelEdit v0.1.2: release run 38012280994 passed both platforms. Public darwin-arm64 artifact is 184431411 bytes, SHA-256 08d8c745a16ff9ab91941951bf1b832cd99fb0271b9724bab8a06efd8e44b88f; win32-x64 is 144496464 bytes, SHA-256 3861cd026f03efe72f2cc8e5c6fd2144110fbe282a4c9edaf25387369f1149ff.
 - AI remove.bg v0.1.1: release run 38011279676 passed both platforms. Public darwin-arm64 artifact SHA-256 db3aad5f0f19331f3a942e28c8d58db03f20650b336fa9e6a941cda337d93bd0; win32-x64 SHA-256 092162476bb866cdb87bbc06b5ea602864224eed089c468ac6e362714a9d9b5a.
 - Signed catalog onboarding: remove.bg market PR 1 and LabelEdit market PR 2. LabelEdit ingest run 38013493628 and same-head validation run 38013642746 passed. The ingest job downloads and validates both public artifacts before signing them; it never runs plugin code.
-- Independent plugin follow-up acceptance pins platform run 38012253834 explicitly, rather than a floating latest build. remove.bg run 38013578336 passed both platforms; LabelEdit run 38013575927 is tracked separately.
+- Independent plugin follow-up acceptance pins platform run 38012253834 explicitly, rather than a floating latest build. remove.bg run 38013578336 and LabelEdit run 38013575927 passed both platforms. Public-market LabelEdit OCR/edit/export acceptance and the plugin-only update lifecycle are separate post-publication runs.
 
 Public repository releases and signed market PRs are the publication evidence. Market signing keys are not present in plugin repositories. Immediate cross-repository dispatch is implemented but requires a restricted MARKET_TRIGGER_TOKEN; without it, the market scheduled workflow checks registered formal releases and proposes PRs. Manual dispatch was used for initial onboarding.
 

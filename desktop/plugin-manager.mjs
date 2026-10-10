@@ -92,7 +92,7 @@ export class PluginManager {
         const relative = 'installed/' + m.id + '/' + m.version + '-' + randomUUID();
         const folder = path.join(this.root, relative); await mkdir(path.dirname(folder), { recursive: true }); await rename(staged, folder);
         await this.stop(m.id);
-        this.state.plugins[m.id] = { folder: relative, enabled: enabled ?? installed?.enabled ?? true, source, previous };
+        this.state.plugins[m.id] = { folder: relative, enabled: enabled ?? installed?.enabled ?? previous?.enabled ?? true, source, previous };
         try { const item = await this.get(m.id); if (item.enabled && item.missing.length) throw new Error('缺少服务依赖：' + item.missing.join('、')); if (item.enabled) await this.probe(item); await this.persist(); }
         catch (error) { if (previous) this.state.plugins[m.id] = previous; else delete this.state.plugins[m.id]; await this.stop(m.id); await rm(folder, { recursive: true, force: true }); throw error; }
         return m;
