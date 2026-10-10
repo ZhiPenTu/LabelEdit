@@ -143,10 +143,16 @@ test('macUpdateAdapter falls back to full package and cleans up component stagin
       artifact,
     };
 
-    const result = await adapter.download(release, s => notifications.push(s));
-    assert.ok(result.prepared.endsWith('ReleaseApp.app'));
-    assert.ok(notifications.some(n => n.fallbackReason && n.fallbackReason.includes('组件更新暂不可用')));
-    await safeRm(result.staging);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('网络不可用（测试模拟）'); };
+    try {
+      const result = await adapter.download(release, s => notifications.push(s));
+      assert.ok(result.prepared.endsWith('ReleaseApp.app'));
+      assert.ok(notifications.some(n => n.fallbackReason && n.fallbackReason.includes('组件更新暂不可用')));
+      await safeRm(result.staging);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
