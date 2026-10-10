@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import os from 'node:os';
-import { applicationBundle, prepareMacUpdate, launchMacInstaller, previousUpdateError, macUpdateAdapter } from '../../desktop/mac-update.mjs';
+import { applicationBundle, prepareMacUpdate, launchMacInstaller, previousUpdateError, macUpdateAdapter, loadMacInstallScript, DEFAULT_MAC_INSTALL_SCRIPT } from '../../desktop/mac-update.mjs';
 import { safeRm, cachedFile } from '../../desktop/update-download.mjs';
 const execute = promisify(execFile);
 test('update targets reject disk images, translocated applications and development executables', { skip: process.platform !== 'darwin' }, () => {
@@ -153,6 +153,54 @@ test('macUpdateAdapter falls back to full package and cleans up component stagin
     } finally {
       globalThis.fetch = originalFetch;
     }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+
+test('loadMacInstallScript safely reads bundled resource and falls back to template on error or ENOTDIR', async () => {
+  const normalScript = await loadMacInstallScript();
+  assert.ok(normalScript.includes('target="$2"'));
+  assert.ok(normalScript.includes("printf 'ready\\n'"));
+
+  // Verify fallback when URL cannot be read (e.g. invalid URL, missing file, or ENOTDIR)
+  const invalidUrl = new URL('./non-existent-script.sh', import.meta.url);
+  const fallback = await loadMacInstallScript(invalidUrl);
+  assert.equal(fallback, DEFAULT_MAC_INSTALL_SCRIPT);
+
+  // Verify process.noAsar state preservation
+  process.noAsar = true;
+  await loadMacInstallScript();
+  assert.equal(process.noAsar, true);
+  process.noAsar = false;
+  await loadMacInstallScript();
+  assert.equal(process.noAsar, false);
+});
+
+test('launchMacInstaller creates staging script using fallback when resource URL throws or in ASAR', { skip: process.platform !== 'darwin', timeout: 60000 }, async () => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), "qingzuo-installer-fallback-"));
+  try {
+    const target = await makeBundle(folder, 'Old', `test.qingzuo.fallback.${Date.now()}`);
+    const staging = await mkdtemp(path.join(folder, 'stage-'));
+    const receipt = path.join(folder, 'receipt.txt');
+    const profile = path.join(folder, 'profile');
+    await mkdir(profile);
+    const prepared = await makeBundle(staging, 'New', `test.qingzuo.new.${Date.now()}`);
+    const waiter = spawn('/bin/sleep', ['2']);
+    const child = await launchMacInstaller({
+      target,
+      prepared,
+      staging,
+      receipt,
+      profile,
+      parent: waiter.pid
+    });
+    const scriptPath = path.join(staging, 'install.sh');
+    assert.ok(await stat(scriptPath));
+    const content = await readFile(scriptPath, 'utf8');
+    assert.ok(content.includes("printf 'ready\\n'"));
+    child.kill();
   } finally {
     await rm(folder, { recursive: true, force: true });
   }

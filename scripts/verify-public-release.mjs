@@ -11,7 +11,7 @@ assert.ok(metadataFile && directory, 'Public Release metadata and downloaded ass
 const release = JSON.parse(await readFile(metadataFile, 'utf8'));
 const { version } = JSON.parse(await readFile('package.json', 'utf8'));
 assert.equal(release.tag_name, 'v' + version);
-assert.equal(release.html_url, 'https://github.com/ZhiPenTu/LabelEdit/releases/tag/v' + version);
+assert.ok(release.html_url === 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/tag/v' + version || release.html_url === 'https://github.com/ZhiPenTu/LabelEdit/releases/tag/v' + version, 'Release HTML URL mismatch: ' + release.html_url);
 assert.equal(release.draft, false);
 assert.equal(release.prerelease, false);
 const mac = `CommerceTools-${version}-mac-arm64`, windows = `CommerceTools-${version}-win-x64`;
@@ -20,7 +20,7 @@ const allowed = new Set([...required, mac + '.dmg.blockmap', mac + '.zip.blockma
 const verified = new Map();
 for (const asset of release.assets) {
   assert.ok(allowed.has(asset.name) && !verified.has(asset.name), 'Unexpected or duplicate public asset: ' + asset.name);
-  assert.equal(asset.browser_download_url, `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/${asset.name}`);
+  assert.ok(asset.browser_download_url === `https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v${version}/${asset.name}` || asset.browser_download_url === `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/${asset.name}`, 'Asset download URL mismatch: ' + asset.browser_download_url);
   const filename = path.join(directory, asset.name), sha256 = createHash('sha256'), sha512 = createHash('sha512');
   assert.equal((await stat(filename)).size, asset.size, 'Asset size mismatch: ' + asset.name);
   for await (const bytes of createReadStream(filename)) { sha256.update(bytes); sha512.update(bytes); }

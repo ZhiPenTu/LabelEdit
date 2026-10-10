@@ -76,8 +76,8 @@ export function validateComponentManifest(value, version) {
   for (const component of value.components) {
     if (!IDS.has(component?.id) || groups.has(component.id)) throw new Error('组件标识无效或重复。');
     validateArtifact(component.artifact);
-    const expected = `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/CommerceTools-${version}-mac-arm64.${component.id}.zip`;
-    if (component.artifact.url !== expected) throw new Error('组件下载地址与版本不匹配。');
+    const expected = repo => `https://github.com/ZhiPenTu/${repo}/releases/download/v${version}/CommerceTools-${version}-mac-arm64.${component.id}.zip`;
+    if (component.artifact.url !== expected('qingzuo-desktop') && component.artifact.url !== expected('LabelEdit')) throw new Error('组件下载地址与版本不匹配。');
     groups.set(component.id, []);
   }
   const entries = new Map(), seen = new Set(); let total = 0;

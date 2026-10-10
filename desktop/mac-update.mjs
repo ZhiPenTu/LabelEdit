@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from './update-fs.mjs';
+import { readFile as readInternalResource } from 'node:fs/promises';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -43,10 +44,54 @@ export async function verifyMacBundle(bundle, version, signal) {
   });
 }
 
-export async function launchMacInstaller({ target, prepared, staging, receipt, profile, parent = process.pid }) {
+export const DEFAULT_MAC_INSTALL_SCRIPT = `#!/bin/sh
+# Trusted main process supplies absolute paths as separate arguments.
+trap '' HUP
+parent="$1"; target="$2"; prepared="$3"; staging="$4"; receipt="$5"; profile="$6"
+backup="$staging/previous.app"
+fail() { printf '%s\\n' "$1" > "$receipt"; exit 1; }
+printf 'ready\\n'
+attempt=0
+while kill -0 "$parent" 2>/dev/null; do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 120 ] || fail '等待应用退出超时，请重新下载更新。'
+  sleep 1
+done
+/bin/mv "$target" "$backup" || fail '无法替换旧应用，请检查应用文件夹权限。'
+if ! /bin/mv "$prepared" "$target"; then
+  /bin/mv "$backup" "$target"
+  printf '%s\\n' '更新安装失败，已尝试恢复原版本。' > "$receipt"
+  /usr/bin/open -n "$target" --args "--user-data-dir=$profile"
+  exit 1
+fi
+if ! /usr/bin/open -n "$target" --args "--user-data-dir=$profile"; then
+  /bin/mv "$target" "$prepared"
+  /bin/mv "$backup" "$target"
+  printf '%s\\n' '新版启动失败，已尝试恢复原版本。' > "$receipt"
+  /usr/bin/open -n "$target" --args "--user-data-dir=$profile"
+  exit 1
+fi
+/bin/rm -f "$receipt"
+/bin/rm -rf "$staging"
+`;
+
+export async function loadMacInstallScript(customUrl = new URL('./mac-install.sh', import.meta.url)) {
+  const previous = process.noAsar;
+  process.noAsar = false;
+  try {
+    return await readInternalResource(customUrl, 'utf8');
+  } catch {
+    return DEFAULT_MAC_INSTALL_SCRIPT;
+  } finally {
+    process.noAsar = previous;
+  }
+}
+
+export async function launchMacInstaller({ target, prepared, staging, receipt, profile, parent = process.pid, scriptContent }) {
   // Copy outside the .app; the helper must survive replacement of app.asar.
   const script = path.join(staging, 'install.sh');
-  await writeFile(script, await readFile(new URL('./mac-install.sh', import.meta.url)), { mode: 0o700 });
+  const content = scriptContent ?? await loadMacInstallScript();
+  await writeFile(script, content, { mode: 0o700 });
   const child = spawn('/bin/sh', [script, String(parent), target, prepared, staging, receipt, profile], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('更新安装助手启动超时。')); }, 5000);
