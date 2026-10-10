@@ -1,7 +1,7 @@
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import semver from 'semver';
-export const API_VERSION = '1.0.0';
+export const API_VERSION = '1.1.0';
 export const TARGET = process.platform + '-' + process.arch;
 export function safeRelative(value) {
   if (typeof value !== 'string' || !value || value.includes('\\') || value.includes(':') || value.includes('\0') || path.posix.isAbsolute(value)) throw new Error('插件路径无效。');

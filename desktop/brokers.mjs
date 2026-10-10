@@ -4,11 +4,15 @@ import { randomUUID } from 'node:crypto';
 import {secureRequest} from './network-transport.mjs';
 import { allowedNetwork } from './security.mjs';
 export class FileBroker {
-  constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); }
-  async create(plugin, bytes, name, mime = 'application/octet-stream') {
+  constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); this.epochs = new Map(); }
+  async initialize() { await rm(this.root, { recursive: true, force: true }); }
+  async create(plugin, bytes, name, mime = 'application/octet-stream', epoch = this.epochs.get(plugin.id) ?? 0) {
+    if (!plugin.permissions.files) throw new Error('插件没有文件权限。');
     if (bytes.length > 64 * 1024 * 1024) throw new Error('文件内容过大。');
+    if ((this.epochs.get(plugin.id) ?? 0) !== epoch) throw new Error('文件未授权或已失效。');
     const dir = path.join(this.root, plugin.id); await mkdir(dir, { recursive: true, mode: 0o700 });
     const token = randomUUID(), filename = path.join(await realpath(dir), token); await writeFile(filename, bytes, { mode: 0o600 });
+    if ((this.epochs.get(plugin.id) ?? 0) !== epoch) { await rm(filename, { force: true }); throw new Error('文件未授权或已失效。'); }
     const item = { token, name: path.basename(name), size: bytes.length, mime };
     this.tokens.set(token, { ...item, filename, owner: plugin.id }); return item;
   }
@@ -20,27 +24,37 @@ export class FileBroker {
   }
   async pick(plugin, options = {}) {
     if (!plugin.permissions.files) throw new Error('插件没有文件权限。');
+    const epoch = this.epochs.get(plugin.id) ?? 0;
     const extensions = (options.extensions ?? []).filter(s => typeof s === 'string' && /^[a-z0-9]{1,8}$/.test(s)).slice(0, 12);
     const result = await this.dialog.showOpenDialog({ title: plugin.title + ' · 选择文件', properties: ['openFile'], filters: extensions.length ? [{ name: '支持的文件', extensions }] : [] });
     if (result.canceled) return null;
     const filename = result.filePaths[0]; const info = await lstat(filename);
     if (!info.isFile() || info.size > 25 * 1024 * 1024) throw new Error('请选择不超过 25 MB 的文件。');
     const ext = path.extname(filename).toLowerCase();
-    return this.create(plugin, await readFile(filename), path.basename(filename), ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf' })[ext]);
+    return this.create(plugin, await readFile(filename), path.basename(filename), ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf' })[ext], epoch);
   }
   async read(plugin, token) { const item = await this.get(plugin, token); return { data: (await readFile(item.filename)).toString('base64'), mime: item.mime }; }
+  async url(plugin, token) {
+    await this.get(plugin, token);
+    return 'commerce-plugin://' + plugin.id + '/__files/' + encodeURIComponent(token);
+  }
+  async release(plugin, token) {
+    const item = await this.get(plugin, token);
+    this.tokens.delete(token);
+    await rm(item.filename, { force: true });
+  }
   async save(plugin, token, filename) {
     const item = await this.get(plugin, token);
     const result = await this.dialog.showSaveDialog({ title: plugin.title + ' · 保存文件', defaultPath: path.basename(filename || item.name) });
-    if (result.canceled) return false; await copyFile(item.filename, result.filePath); return true;
+    if (result.canceled) return false; await this.get(plugin, token); await copyFile(item.filename, result.filePath); return true;
   }
-  async revoke(id) { const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
+  async revoke(id) { this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1); const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
 }
 export class NetworkBroker {
   constructor(files, credentials, request = secureRequest) { this.files = files; this.credentials = credentials; this.request = request; this.tasks = new Map(); }
   async call(plugin, options) {
     const url = allowedNetwork(plugin, options.url);
-    if (url.href !== 'https://api.remove.bg/v1.0/removebg') return this.generic(plugin, options, url);
+    if (url.href !== 'https://api.remove.bg/v1.0/removebg' || !options.fileToken) return this.generic(plugin, options, url);
     // v1's online capability is deliberately bounded to the documented upload API.
     if (url.href !== 'https://api.remove.bg/v1.0/removebg' || !(plugin.permissions.credentials ?? []).includes(options.credential)) throw new Error('服务或凭据未授权。');
     const item = await this.files.get(plugin, options.fileToken);
@@ -68,6 +82,28 @@ export class NetworkBroker {
   async generic(plugin,options,url) {
     const method=options.method || 'GET';if(!['GET','POST','PUT','PATCH','DELETE'].includes(method))throw new Error('请求方法不受支持。');
     const headers={Accept:'application/json'};let body;
+    if (options.responseType !== undefined && !['data', 'file'].includes(options.responseType)) throw new Error('响应类型不受支持。');
+    if (options.responseType === 'file' && !plugin.permissions.files) throw new Error('插件没有文件权限。');
+    if (options.multipart !== undefined) {
+      if (options.json !== undefined || method === 'GET' || !options.multipart || typeof options.multipart !== 'object') throw new Error('上传内容无效。');
+      const fields = options.multipart.fields ?? {}, attachments = options.multipart.files ?? [];
+      if (!fields || typeof fields !== 'object' || Array.isArray(fields) || Object.keys(fields).length > 32 || !Array.isArray(attachments) || attachments.length > 16) throw new Error('上传内容无效。');
+      const validField = name => typeof name === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(name);
+      const form = new FormData(); let total = 0;
+      for (const [name, value] of Object.entries(fields)) {
+        if (!validField(name) || typeof value !== 'string') throw new Error('上传字段无效。');
+        total += Buffer.byteLength(value); form.append(name, value);
+      }
+      const items = [];
+      for (const attachment of attachments) {
+        if (!attachment || !validField(attachment.field)) throw new Error('上传文件字段无效。');
+        const item = await this.files.get(plugin, attachment.token);
+        total += item.size; items.push({ field: attachment.field, item });
+      }
+      if (total > 25 * 1024 ** 2) throw new Error('上传内容不能超过 25 MB。');
+      for (const { field, item } of items) form.append(field, new Blob([await readFile(item.filename)], { type: item.mime }), item.name);
+      body = form;
+    }
     if(options.json!==undefined) {body=JSON.stringify(options.json);if(body.length>4*1024*1024||method==='GET')throw new Error('请求内容无效或过大。');headers['Content-Type']='application/json';}
     if(options.credential) {
       if(!(plugin.permissions.credentials ?? []).includes(options.credential))throw new Error('凭据未授权。');
@@ -78,8 +114,15 @@ export class NetworkBroker {
     const controller=new AbortController();this.tasks.set(key,controller);const timer=setTimeout(()=>controller.abort(),120000);
     try {
       controller.signal.throwIfAborted();const response=await this.request(url.href,{method,headers,body,redirect:'error',signal:controller.signal});
-      const chunks=[];let size=0;if(response.body)for await(const chunk of response.body){size+=chunk.length;if(size>8*1024*1024){controller.abort();throw new Error('服务响应过大。');}chunks.push(chunk);}
-      controller.signal.throwIfAborted();return {status:response.status,mime:response.headers.get('content-type')||'application/octet-stream',data:Buffer.concat(chunks).toString('base64')};
+      const limit = options.responseType === 'file' ? 64 * 1024 ** 2 : 8 * 1024 ** 2;
+      const chunks=[];let size=0;if(response.body)for await(const chunk of response.body){size+=chunk.length;if(size>limit){controller.abort();throw new Error('服务响应过大。');}chunks.push(chunk);}
+      controller.signal.throwIfAborted();
+      const bytes = Buffer.concat(chunks), mime = response.headers.get('content-type') || 'application/octet-stream';
+      if (options.responseType === 'file') {
+        if (options.filename !== undefined && (typeof options.filename !== 'string' || !options.filename || options.filename.length > 240)) throw new Error('文件名无效。');
+        return { status: response.status, mime, file: await this.files.create(plugin, bytes, options.filename || 'response', mime) };
+      }
+      return {status:response.status,mime,data:bytes.toString('base64')};
     }catch(error){if(controller.signal.aborted)throw new Error('网络任务已取消或超时。');throw new Error('网络请求未完成，请检查连接或服务配置。');}finally{clearTimeout(timer);this.tasks.delete(key);}
   }
   cancel(id, task) { this.tasks.get(id + ':' + task)?.abort(); }

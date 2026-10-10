@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,7 +18,8 @@ try {
   let output, publicKey;
   if (process.argv.includes('--release-artifacts')) {
     output = path.resolve('release/components');
-    publicKey = JSON.parse(await readFile('resources/generated/market.json', 'utf8')).publicKey;
+    const config = JSON.parse(await readFile('resources/generated/market.json', 'utf8'));
+    publicKey = config.updatePublicKey || config.publicKey;
   } else {
     const keys = generateKeyPairSync('ed25519'); publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' });
     output = path.join(temporary, 'artifacts');
@@ -26,9 +27,10 @@ try {
   }
   const installed = path.join(temporary, 'installed/Qingzuo.app');
   await cp(target, installed, { recursive: true, verbatimSymlinks: true });
-  // Simulate a changed shell; all actual Electron, dependencies, OCR and model
-  // files remain available to exercise reuse of the complete shipped runtime.
   await writeFile(path.join(installed, 'Contents/Resources/app.asar'), 'previous application code');
+  const legacyDirectory = 'Contents/Resources/commerce/plugins/official.labeledit/backend';
+  await mkdir(path.join(installed, legacyDirectory), { recursive: true });
+  await writeFile(path.join(installed, legacyDirectory, 'old-runtime'), 'obsolete bundled plugin');
   const manifestName = componentManifestName(version), bytes = await readFile(path.join(output, manifestName));
   const manifestArtifact = { url: `https://github.com/ZhiPenTu/LabelEdit/releases/download/v${version}/${manifestName}`, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
   const requests = [], states = [];
@@ -48,6 +50,10 @@ try {
   const prepared = await prepareComponentUpdate({ manifestArtifact, publicKey, version, installed, staging, cache: path.join(temporary, 'cache'), notify: value => states.push(value),
     options: { fetchImpl: (url, init) => fetch(`http://127.0.0.1:${server.address().port}${new URL(url).pathname}`, init) } });
   await verifyMacBundle(prepared, version);
+  const envelope = JSON.parse(bytes), manifest = JSON.parse(Buffer.from(envelope.payload, 'base64'));
+  assert.deepEqual(manifest.components.map(component => component.id).sort(), ['core', 'dependencies', 'electron']);
+  assert.equal(manifest.files.some(file => file.path.includes('/commerce/plugins/')), false);
+  await assert.rejects(access(path.join(prepared, legacyDirectory)));
   assert.deepEqual(requests, [manifestName, `CommerceTools-${version}-mac-arm64.core.zip`]);
   console.log('Complete application reconstructed and codesign verified; downloading only the changed core component.');
   const executable = path.join(prepared, 'Contents/MacOS/Qingzuo');
@@ -56,7 +62,7 @@ try {
     child.once('error', reject); child.once('exit', code => code === 0 ? resolve() : reject(new Error('重建应用的离线回归失败。')));
   });
   const metrics = { version, source: 'local HTTP component artifacts', manifestBytes: bytes.length, downloadedArchiveBytes: states.at(-1).transferred,
-    totalHTTPPayloadBytes: bytes.length + states.at(-1).transferred, reusedInstalledBytes: states.at(-1).reusedBytes, requests, codesign: 'passed', harness: 'passed', offlineOCR: 'passed', pdfExport: 'passed' };
+    totalHTTPPayloadBytes: bytes.length + states.at(-1).transferred, reusedInstalledBytes: states.at(-1).reusedBytes, requests, codesign: 'passed', harness: 'passed', purePlatform: 'passed' };
   await mkdir('output/update-validation', { recursive: true });
   await writeFile('output/update-validation/components.json', JSON.stringify(metrics, null, 2));
   console.log(JSON.stringify(metrics));

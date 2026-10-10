@@ -4,3 +4,8 @@ test('catalog rejects corrupt data and duplicate/protected identities before ren
  assert.equal(validateCatalog({schemaVersion:1,plugins:[entry]})[0].id,entry.id);
  for(const plugins of [[entry,entry],[{...entry,id:'system.home'}],[{...entry,description:null}],[{...entry,version:'invalid'}],[{...entry,artifacts:{'darwin-arm64':{...entry.artifacts['darwin-arm64'],url:'file:///tmp/plugin'}}}]])assert.throws(()=>validateCatalog({schemaVersion:1,plugins}));
 });
+test('market API ranges default to 1.0 and mark future APIs incompatible', () => {
+ const entries=validateCatalog({schemaVersion:1,plugins:[entry,{...entry,id:'official.future',api:'^2.0.0'}]});
+ assert.equal(entries[0].compatible,true);assert.equal(entries[1].compatible,false);
+ assert.throws(()=>validateCatalog({schemaVersion:1,plugins:[{...entry,api:'invalid'}]}));
+});

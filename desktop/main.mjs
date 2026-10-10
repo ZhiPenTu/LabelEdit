@@ -14,6 +14,7 @@ import {validateCatalog} from './catalog.mjs';
 import { UpdateService, nativeUpdateAdapter } from './update-service.mjs';
 import { macUpdateAdapter, previousUpdateError } from './mac-update.mjs';
 import {desktopSigningMode} from './distribution.mjs';
+import { preparePluginMigration } from './plugin-migration.mjs';
 // Resolve the established profile before changing the display name. This also
 // preserves an explicit --user-data-dir supplied by integration tests/users.
 app.setName('Commerce Tools');
@@ -28,6 +29,7 @@ const views = new Map(), owners = new Map(), kernelRequests = new Map(); let ker
 const pluginSessions = new Map();
 const viewQueues = new Map(), viewEpochs = new Map();
 let updateService;
+let migration;
 const generated = app.isPackaged ? path.join(process.resourcesPath, 'commerce') : path.join(root, 'resources/generated');
 const launcher = path.join(generated, 'commerce-sandbox' + (process.platform === 'win32' ? '.exe' : ''));
 function changed() { if (window && !window.isDestroyed()) window.webContents.send('commerce:changed'); }
@@ -55,6 +57,11 @@ async function resourceResponse(filename) {
 async function servePlugin(request, id) {
   try { const url = new URL(request.url); if (url.hostname !== id || url.protocol !== 'commerce-plugin:') return new Response('Forbidden', { status: 403 });
     const plugin = await manager.get(id); if (!plugin.enabled) return new Response('Disabled', { status: 403 });
+    const token = url.pathname.match(/^\/__files\/([a-f0-9-]{36})$/);
+    if (token) {
+      const item = await files.get(plugin, token[1]);
+      return new Response(await readFile(item.filename), { headers: { 'Content-Type': item.mime, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; sandbox" } });
+    }
     const image = url.pathname.match(/^\/api\/documents\/([a-f0-9]{32})\/pages\/(\d{1,2})\/image$/);
     if (image && plugin.id === 'official.labeledit') { const value = await (await workers.start(plugin)).call('image', { id: image[1], page: Number(image[2]) }); return new Response(Buffer.from(value.data, 'base64'), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } }); }
     const filename = await confinedPath(plugin.folder, decodeURIComponent(url.pathname.slice(1)));
@@ -181,7 +188,16 @@ async function performPlatform(method, args) {
   if (method === 'plugins.uninstall') { await manager.uninstall(args.id); return; }
   if (method === 'plugins.rollback') { await manager.rollback(args.id); return; }
   if (method === 'market.list') return catalog();
-  if (method === 'market.install') { const entry = (await catalog()).items.find(p => p.id === args.id); const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。'); await manager.install(await boundedDownload(artifact.url), { source: 'market', record: { ...artifact, id: entry.id, version: entry.version, platform: process.platform + '-' + process.arch } }); return; }
+  if (method === 'market.install') {
+    const entry = (await catalog()).items.find(p => p.id === args.id);
+    if (entry && !entry.compatible) throw new Error('请先升级轻作，当前插件 API 不兼容。');
+    const artifact = entry?.artifacts?.[process.platform + '-' + process.arch]; if (!artifact) throw new Error('没有适用当前平台的制品。');
+    const restoring = args.id === 'official.labeledit' && await migration.status(manager);
+    await manager.install(await boundedDownload(artifact.url), { source: 'market', enabled: restoring ? migration.enabled : undefined,
+      record: { ...artifact, id: entry.id, version: entry.version, api: entry.api, platform: process.platform + '-' + process.arch } });
+    if (restoring) await migration.dismiss();
+    return;
+  }
   if (method === 'updates.check' || method === 'updates.download') {
     if (!app.isPackaged) throw new Error('开发环境不检查安装包更新。');
     if (method === 'updates.check') updateService.check();
@@ -192,7 +208,8 @@ async function performPlatform(method, args) {
 }
 ipcMain.handle('commerce:platform', async (event, method, args = {}) => {
   assertFrame(event, true); validateCall(method, args);
-  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: systems.length === 7 ? await kernelRequest({type:'call',kind:'system',service:'home',method:'list',args:{}}) : (await manager.list()).map(sanitizePlugin), update: updateService.state, tabs: [...views.keys()] };
+  if (method === 'status') return { version: app.getVersion(), kernel: { ready: systems.length === 7, error: kernelError, version: '0.2.1-alpha.1', systems }, plugins: systems.length === 7 ? await kernelRequest({type:'call',kind:'system',service:'home',method:'list',args:{}}) : (await manager.list()).map(sanitizePlugin), update: updateService.state, tabs: [...views.keys()], migration: await migration.status(manager) };
+  if (method === 'migration.dismiss') { await migration.dismiss(); changed(); return; }
   if (method === 'kernel.retry') { await startKernel(); return true; }
   if (method === 'view.open') return openView(args.id, args.settings);
   if (method === 'view.hide') { hideViews(); return; }
@@ -216,6 +233,8 @@ ipcMain.handle('commerce:plugin', async (event, method, args = {}) => {
     return files.create(plugin, Buffer.from(args.data, 'base64'), args.filename, args.mime);
   }
   if (method === 'files.read') return files.read(plugin, args.token);
+  if (method === 'files.url') return files.url(plugin, args.token);
+  if (method === 'files.release') return files.release(plugin, args.token);
   if (method === 'files.save') return files.save(plugin, args.token, args.filename);
   if (method.startsWith('credentials.')) {
     if (!(plugin.permissions.credentials ?? []).includes(args.name)) throw new Error('凭据未授权。');
@@ -240,8 +259,10 @@ async function shutdownRuntime() {
 }
 async function main() {
 await app.whenReady();
+migration = await preparePluginMigration(app.getPath('userData'));
 await mkdir(app.getPath('userData'), { recursive: true });
 credentials = new Credentials(launcher, 'profile.' + createHash('sha256').update(app.getPath('userData')).digest('hex').slice(0,16) + ':'); files = new FileBroker(path.join(app.getPath('userData'), 'files'), dialog); network = new NetworkBroker(files, credentials);
+await files.initialize();
 workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));
@@ -249,7 +270,7 @@ const distribution = JSON.parse(await readFile(path.join(generated, 'distributio
 const signed = desktopSigningMode({ COMMERCE_DESKTOP_SIGNING: distribution.signing }) === 'signed';
 const receipt = path.join(app.getPath('userData'), 'update-error.txt');
 const adapter = process.platform === 'darwin' && !signed
-  ? macUpdateAdapter({ app, beforeInstall: shutdownRuntime, receipt, publicKey: marketConfig.publicKey })
+  ? macUpdateAdapter({ app, beforeInstall: shutdownRuntime, receipt, publicKey: marketConfig.updatePublicKey || marketConfig.publicKey })
   : nativeUpdateAdapter(autoUpdater);
 updateService = new UpdateService(adapter, changed);
 autoUpdater.on('error', error => updateService.fail(error));

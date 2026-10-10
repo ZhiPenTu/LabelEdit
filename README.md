@@ -1,63 +1,19 @@
-# 轻作 Qingzuo / LabelEdit
+# 轻作 Qingzuo
 
-轻巧的日常工具工作台，基于 Electron + DeepSeek Harness。用户通过工具中心发现、安装、配置、使用和更新插件。LabelEdit 默认附带，支持离线 PDF/OCR 编辑；AI 抠图独立安装，使用用户自己的 remove.bg API 密钥。
+轻作是基于 Electron、DeepSeek Harness 和系统沙箱的插件桌面工作台。v0.2.7 起安装包只包含底座，业务工具从独立插件市场按需安装。
 
-[v0.2.4 下载与变更日志](https://github.com/ZhiPenTu/LabelEdit/releases/tag/v0.2.4)。新增差量下载、断点续传和 macOS 签名组件复用，保留应用内进度、完整性校验及自动安装重启，以及轻作工具中心、插件市场和 LabelEdit 编辑器。v0.2.3 用户可在应用内升级，本次仍需下载完整包；新的差量和组件能力从 v0.2.4 客户端开始用于后续更新。v0.2.0–v0.2.2 用户需先手动安装本版。当前通过 GitHub 分发未签名安装包；Apple/Windows 发布者签名为后续可选能力。
+- LabelEdit: https://github.com/ZhiPenTu/qingzuo-plugin-labeledit
+- AI 抠图: https://github.com/ZhiPenTu/qingzuo-plugin-removebg
+- 市场: https://github.com/ZhiPenTu/qingzuo-market
 
-支持 macOS 14+ Apple Silicon 和 Windows 10+ x64。
+## 开发与验证
 
-- [最终目标任务书](docs/commerce-plugin-platform-taskbook.md)
-- [实现状态和验收证据](docs/implementation-status.md)
-- [开发、测试与发布](docs/release-guide.md)
-- [插件 SDK 与开发模板](docs/plugin-development.md)
-- [第三方声明](docs/third-party-notices.md)
+需要 Node 24、Rust；macOS 需要 Xcode 命令行工具。原生构建工具可能需要 Python，但底座不安装业务 Python/OCR 依赖。
 
-## 开发与运行
+运行 npm ci --ignore-scripts、node node_modules/electron/install.js、npm run build:harness-native、npm run build:sandbox、npm run build、npm run platform:prepare，然后 npm run desktop:dev。
 
-开发需要 Node 24、Python 3.12、Rust。按发布指南安装依赖和 OCR 模型，然后执行：
+验证使用 npm test、npm run test:platform、npm run test:desktop。npm run build:desktop 生成纯底座安装包。
 
-```sh
-npm run build:sandbox
-python scripts/build_backend.py
-npm run build
-npm run platform:prepare
-npm run desktop:start
-```
+SDK 源码位于 packages/plugin-sdk，版本 1.1.1，运行时 API 1.1.0。插件 API、独立测试入口和发布说明见 docs/plugin-development.md 和 docs/release-guide.md。
 
-`npm run desktop:dev` 启动开发前端与桌面壳。普通用户从安装包运行，无需安装 Node、Python 或包管理器。
-
-## 插件与架构
-
-底座直接依赖官方 `@deepseek-ai/dsh@0.2.1-alpha.1` 及完整锁定的依赖树，通过自定义 `commerce-desktop` Profile 和 Bundle 启动内核，自有 React 界面提供工具中心、市场、插件管理、设置和应用内更新入口（下载进度、安装并重启）。
-
-工具网页运行于独立、关闭 Node 集成的沙箱页面。本地程序经 macOS Seatbelt 或 Windows AppContainer + Job Object 启动；系统沙箱不可用时拒绝运行。文件、网络与凭据通过宿主代理授权，第三方代码不加载进内核进程。
-
-`npm run plugin -- create my-tool` 创建网页插件；加 `--native` 创建本地处理模板。构建后的 ZIP 制品可本地导入，或通过签名市场独立安装和更新，无需重编译底座。首版市场提供目录与下载，不包含账号、支付或开发者自助发布。
-
-LabelEdit 的 PDF、字体与离线 OCR 资源归插件所有，打开后按需启动 RPC 处理程序。旧 Tauri 壳、HTTP 服务、重复启动与打包脚本已清理；旧版下载与更新清单也已移除。
-
-## LabelEdit 使用
-
-1. 在工具中心打开 LabelEdit，选择 PDF 或使用示例标签。
-2. 点选识别出的文字，或使用「框选区域」覆盖漏识别的文字。
-3. 输入替换文字，调整字体、字号、加粗、文字颜色和背景颜色。
-4. 应用修改并检查预览，可撤销或移除修改。
-5. 导出 PDF 并选择保存位置。保留原页面尺寸，标签打印使用实际大小 / 100%，原文件不会被覆盖。
-
-底座「更新」页面检查 GitHub 最新公开版本，只显示该版本的变更日志；点击「下载并重启更新」后显示下载进度，完成校验后自动安装并重启。更新前请保存正在编辑的文件。插件仍通过签名校验独立安装和更新。主题支持浅色、深色与跟随系统，PDF 与导出颜色不受主题影响。
-
-## 验证
-
-```sh
-npm test
-npm run build
-python -m pytest -q
-npm run test:platform
-npm run test:desktop
-```
-
-平台测试使用真实 Harness、系统沙箱、系统凭据库及打包 RPC。Electron 测试覆盖独立插件安装、隔离、工具标签页、离线 PDF 与模拟抠图保存。跨平台 CI 同时构建 macOS arm64 与 Windows x64；macOS 14 / Windows 10 最低支持系统的手动安装与升级尚待验收。remove.bg 真实 API 验收按用户决定暂缓。
-
-## 开源协议
-
-[MIT](LICENSE)。保留 DeepSeek Harness 与全部第三方声明。
+支持 macOS 14+ Apple Silicon、Windows 10+ x64。Harness 固定 0.2.1-alpha.1，插件代码运行在隔离上下文中。

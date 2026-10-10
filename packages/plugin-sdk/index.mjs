@@ -4,6 +4,7 @@ export function createPluginClient(bridge = globalThis.commercePlugin) {
   return Object.freeze({
     invoke,
     files: { pick: options => invoke('files.pick', options), read: token => invoke('files.read', { token }), create: options => invoke('files.create', options),
+      url: token => invoke('files.url', { token }), release: token => invoke('files.release', { token }),
       save: (token, filename) => invoke('files.save', { token, filename }) },
     credentials: { set: (name, value) => invoke('credentials.set', { name, value }),
       status: name => invoke('credentials.status', { name }), clear: name => invoke('credentials.clear', { name }) },

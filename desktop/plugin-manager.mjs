@@ -53,7 +53,7 @@ export class PluginManager {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     try { this.state = JSON.parse(await readFile(path.join(this.root, 'state.json'), 'utf8')); if (!this.state.plugins || typeof this.state.plugins !== 'object' || Array.isArray(this.state.plugins) || Object.values(this.state.plugins).some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('invalid state'); }
     catch (e) { if (e.code !== 'ENOENT') await rename(path.join(this.root, 'state.json'), path.join(this.root, 'state.corrupt-' + Date.now() + '.json')); this.state = { plugins: {} }; }
-    for (const name of await readdir(this.bundled)) {
+    for (const name of await readdir(this.bundled).catch(error => { if (error.code === 'ENOENT') return []; throw error; })) {
       const folder = path.join(this.bundled, name);
       const manifest = validateManifest(JSON.parse(await readFile(path.join(folder, 'package.json'), 'utf8')));
       this.defaults.set(manifest.id, { ...manifest, folder, source: 'bundled', enabled: true });
@@ -76,23 +76,25 @@ export class PluginManager {
     return [...items.values()].map(p => ({ ...p, missing: (p.services?.requires ?? []).filter(s => !providers.has(s)) }));
   }
   async get(id) { const p = (await this.list()).find(p => p.id === id); if (!p) throw new Error('插件未安装。'); return p; }
-  async install(bytes, { source = 'local', record } = {}) {
+  async install(bytes, { source = 'local', record, enabled } = {}) {
     return this.transaction(async () => {
       if (source === 'market') verifyArtifact(bytes, record, this.publicKey);
       const staged = path.join(this.root, '.staging', randomUUID());
       try {
         const m = await unpackPackage(bytes, staged);
         if (record && (record.id !== m.id || record.version !== m.version)) throw new Error('市场清单与插件包不一致。');
+        if (record?.api && record.api !== m.api) throw new Error('市场 API 声明与插件包不一致。');
         const installed = (await this.list()).find(p => p.id === m.id);
         if (source === 'market' && installed && !semver.gt(m.version, installed.version)) throw new Error('市场版本必须高于已安装版本。');
         const conflicts = (await this.list()).filter(p => p.id !== m.id && p.enabled && (p.services?.provides ?? []).some(service => m.services?.provides?.includes(service)));
         if (conflicts.length) throw new Error('服务已由其他插件提供：' + conflicts.map(p => p.title).join('、'));
         const previous = this.state.plugins[m.id] && !this.state.plugins[m.id].removed ? structuredClone(this.state.plugins[m.id]) : null;
-        const relative = 'installed/' + m.id + '/' + m.version + '-' + randomUUID();
+        const installationId = Buffer.from(randomUUID().replaceAll('-', ''), 'hex').toString('base64url');
+        const relative = 'installed/' + m.id + '/' + installationId;
         const folder = path.join(this.root, relative); await mkdir(path.dirname(folder), { recursive: true }); await rename(staged, folder);
         await this.stop(m.id);
-        this.state.plugins[m.id] = { folder: relative, enabled: true, source, previous };
-        try { const item = await this.get(m.id); if (item.missing.length) throw new Error('缺少服务依赖：' + item.missing.join('、')); await this.probe(item); await this.persist(); }
+        this.state.plugins[m.id] = { folder: relative, enabled: enabled ?? installed?.enabled ?? previous?.enabled ?? true, source, previous };
+        try { const item = await this.get(m.id); if (item.enabled && item.missing.length) throw new Error('缺少服务依赖：' + item.missing.join('、')); if (item.enabled) await this.probe(item); await this.persist(); }
         catch (error) { if (previous) this.state.plugins[m.id] = previous; else delete this.state.plugins[m.id]; await this.stop(m.id); await rm(folder, { recursive: true, force: true }); throw error; }
         return m;
       } finally { await rm(staged, { recursive: true, force: true }); }

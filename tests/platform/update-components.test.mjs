@@ -106,6 +106,10 @@ test('component download cancellation resumes the exact partial archive without 
 test('manifest signatures bind product, platform and version and reject plugin-domain signatures', mac, async t => {
   const f = await fixture(t), bytes = await readFile(path.join(f.output, componentManifestName('0.2.4')));
   assert.equal(readComponentManifest(bytes, publicKey, '0.2.4').version, '0.2.4');
+  const legacy = JSON.parse(bytes), legacyPayload = Buffer.from(legacy.payload, 'base64');
+  delete legacy.signatureVersion;
+  legacy.signature = sign(null, Buffer.concat([Buffer.from('Qingzuo desktop component update v1\0'), legacyPayload]), keys.privateKey).toString('base64');
+  assert.equal(readComponentManifest(Buffer.from(JSON.stringify(legacy)), publicKey, '0.2.4').version, '0.2.4');
   assert.throws(() => readComponentManifest(bytes, publicKey, '0.2.5'), /不匹配/);
   const wrong = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' });
   assert.throws(() => readComponentManifest(bytes, wrong, '0.2.4'), /签名验证失败/);
