@@ -2,7 +2,7 @@ import { createPublicKey, sign, verify } from 'node:crypto';
 import { chmod, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
-import { downloadArtifact, fileDigest, matchesArtifact, cachedFile, pruneCache, validateArtifact } from './update-download.mjs';
+import { downloadArtifact, fileDigest, matchesArtifact, cachedFile, pruneCache, validateArtifact, withNoAsar } from './update-download.mjs';
 
 const DOMAIN = Buffer.from('Qingzuo desktop component update v1\0');
 const IDS = new Set(['core', 'electron', 'dependencies', 'ocr-runtime', 'ocr-models', 'plugin-code']);
@@ -49,19 +49,21 @@ function resolveManifestLink(entries, filename) {
 // Inventories never traverse links. The signed manifest carries links and modes;
 // archives contain only flat, content-addressed regular-file payloads.
 export async function inventoryBundle(bundle, signal) {
-  const files = [];
-  async function walk(relative) {
-    for (const name of (await readdir(path.join(bundle, relative))).sort()) {
-      signal?.throwIfAborted();
-      const filename = path.posix.join(relative, name), info = await lstat(path.join(bundle, filename));
-      const common = { path: filename, mode: info.mode & 0o777 };
-      if (info.isDirectory()) { files.push({ ...common, type: 'directory' }); await walk(filename); }
-      else if (info.isSymbolicLink()) files.push({ ...common, type: 'symlink', component: componentID(filename), target: await readlink(path.join(bundle, filename)) });
-      else if (info.isFile()) files.push({ ...common, type: 'file', component: componentID(filename), size: info.size, sha256: await fileDigest(path.join(bundle, filename)) });
-      else throw new Error('应用包含不支持的文件类型。');
+  return withNoAsar(async () => {
+    const files = [];
+    async function walk(relative) {
+      for (const name of (await readdir(path.join(bundle, relative))).sort()) {
+        signal?.throwIfAborted();
+        const filename = path.posix.join(relative, name), info = await lstat(path.join(bundle, filename));
+        const common = { path: filename, mode: info.mode & 0o777 };
+        if (info.isDirectory()) { files.push({ ...common, type: 'directory' }); await walk(filename); }
+        else if (info.isSymbolicLink()) files.push({ ...common, type: 'symlink', component: componentID(filename), target: await readlink(path.join(bundle, filename)) });
+        else if (info.isFile()) files.push({ ...common, type: 'file', component: componentID(filename), size: info.size, sha256: await fileDigest(path.join(bundle, filename)) });
+        else throw new Error('应用包含不支持的文件类型。');
+      }
     }
-  }
-  await walk(''); return files;
+    await walk(''); return files;
+  });
 }
 
 export function validateComponentManifest(value, version) {
@@ -124,52 +126,59 @@ export function readComponentManifest(bytes, publicKey, version) {
 }
 
 async function installedMatches(bundle, file) {
-  try {
-    // A parent link must never redirect a reusable file outside the application.
-    let parent = path.dirname(file.path);
-    while (parent !== '.') {
-      if (!(await lstat(path.join(bundle, parent))).isDirectory()) return false;
-      parent = path.dirname(parent);
-    }
-    const filename = path.join(bundle, file.path), info = await lstat(filename);
-    if ((info.mode & 0o777) !== file.mode) return false;
-    if (file.type === 'symlink') return info.isSymbolicLink() && await readlink(filename) === file.target;
-    return info.isFile() && await matchesArtifact(filename, file);
-  } catch (error) { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return false; throw error; }
+  return withNoAsar(async () => {
+    try {
+      // A parent link must never redirect a reusable file outside the application.
+      let parent = path.dirname(file.path);
+      while (parent !== '.') {
+        if (!(await lstat(path.join(bundle, parent))).isDirectory()) return false;
+        parent = path.dirname(parent);
+      }
+      const filename = path.join(bundle, file.path), info = await lstat(filename);
+      if ((info.mode & 0o777) !== file.mode) return false;
+      if (file.type === 'symlink') return info.isSymbolicLink() && await readlink(filename) === file.target;
+      return info.isFile() && await matchesArtifact(filename, file);
+    } catch (error) { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return false; throw error; }
+  });
 }
 
 async function unpackComponent(archive, files, destination, signal) {
-  const expected = new Map(files.filter(f => f.type === 'file').map(f => [f.sha256, f.size]));
-  const zip = new AdmZip(archive), seen = new Set();
-  for (const entry of zip.getEntries()) {
-    signal?.throwIfAborted();
-    const type = (entry.header.attr >>> 16) & 0xf000;
-    if (seen.has(entry.entryName) || !expected.has(entry.entryName) || entry.isDirectory || ![0, 0x8000].includes(type)
-      || entry.header.size !== expected.get(entry.entryName)) throw new Error('组件压缩包包含非法文件。');
-    seen.add(entry.entryName);
-  }
-  if (seen.size !== expected.size) throw new Error('组件压缩包缺少文件。');
-  for (const file of files.filter(f => f.type === 'file')) {
-    signal?.throwIfAborted();
-    const filename = path.join(destination, file.path);
-    await writeFile(filename, zip.getEntry(file.sha256).getData(), { mode: file.mode, flag: 'wx' });
-    await chmod(filename, file.mode);
-    if (!await matchesArtifact(filename, file)) throw new Error('组件文件完整性校验失败。');
-  }
+  return withNoAsar(async () => {
+    const expected = new Map(files.filter(f => f.type === 'file').map(f => [f.sha256, f.size]));
+    const zip = new AdmZip(archive), seen = new Set();
+    for (const entry of zip.getEntries()) {
+      signal?.throwIfAborted();
+      const type = (entry.header.attr >>> 16) & 0xf000;
+      if (seen.has(entry.entryName) || !expected.has(entry.entryName) || entry.isDirectory || ![0, 0x8000].includes(type)
+        || entry.header.size !== expected.get(entry.entryName)) throw new Error('组件压缩包包含非法文件。');
+      seen.add(entry.entryName);
+    }
+    if (seen.size !== expected.size) throw new Error('组件压缩包缺少文件。');
+    for (const file of files.filter(f => f.type === 'file')) {
+      signal?.throwIfAborted();
+      const filename = path.join(destination, file.path);
+      await writeFile(filename, zip.getEntry(file.sha256).getData(), { mode: file.mode, flag: 'wx' });
+      await chmod(filename, file.mode);
+      if (!await matchesArtifact(filename, file)) throw new Error('组件文件完整性校验失败。');
+    }
+  });
 }
 
 export async function verifyBundleInventory(bundle, expected, signal) {
-  const actual = await inventoryBundle(bundle, signal);
-  const canonical = files => files.map(file => JSON.stringify([file.path, file.type, file.mode, file.component, file.size, file.sha256, file.target])).sort();
-  if (JSON.stringify(canonical(actual)) !== JSON.stringify(canonical(expected))) throw new Error('重建应用的文件或权限不匹配。');
-  const root = await realpath(bundle);
-  for (const file of expected.filter(f => f.type === 'symlink')) {
-    const target = await realpath(path.join(bundle, file.path));
-    if (!target.startsWith(root + path.sep)) throw new Error('组件链接超出应用范围。');
-  }
+  return withNoAsar(async () => {
+    const actual = await inventoryBundle(bundle, signal);
+    const canonical = files => files.map(file => JSON.stringify([file.path, file.type, file.mode, file.component, file.size, file.sha256, file.target])).sort();
+    if (JSON.stringify(canonical(actual)) !== JSON.stringify(canonical(expected))) throw new Error('重建应用的文件或权限不匹配。');
+    const root = await realpath(bundle);
+    for (const file of expected.filter(f => f.type === 'symlink')) {
+      const target = await realpath(path.join(bundle, file.path));
+      if (!target.startsWith(root + path.sep)) throw new Error('组件链接超出应用范围。');
+    }
+  });
 }
 
 export async function prepareComponentUpdate({ manifestArtifact, publicKey, version, installed, staging, cache, notify = () => {}, options = {} }) {
+  return withNoAsar(async () => {
   validateArtifact(manifestArtifact, MAX_MANIFEST);
   const manifestFile = await downloadArtifact(manifestArtifact, cache, () => {}, options);
   const manifest = readComponentManifest(await readFile(manifestFile), publicKey, version);
@@ -210,4 +219,5 @@ export async function prepareComponentUpdate({ manifestArtifact, publicKey, vers
   await verifyBundleInventory(bundle, manifest.files, options.signal);
   await pruneCache(cache, [manifestArtifact.sha256, ...groups.map(g => g.artifact.sha256)]);
   return bundle;
+  });
 }

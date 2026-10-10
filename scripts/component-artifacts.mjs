@@ -7,10 +7,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import AdmZip from 'adm-zip';
 import { inventoryBundle, componentManifestName, signComponentManifest } from '../desktop/update-components.mjs';
-import { fileDigest } from '../desktop/update-download.mjs';
+import { fileDigest, withNoAsar } from '../desktop/update-download.mjs';
 
 const execute = promisify(execFile);
 export async function buildComponentArtifacts({ bundle, output, version, privateKey }) {
+  return withNoAsar(async () => {
   if (process.platform !== 'darwin') throw new Error('组件制品目前仅支持 macOS。');
   await mkdir(output, { recursive: true });
   const files = await inventoryBundle(bundle), components = [];
@@ -41,6 +42,7 @@ export async function buildComponentArtifacts({ bundle, output, version, private
   if (bytes.length > 16 * 1024 ** 2) throw new Error('组件签名清单过大。');
   await writeFile(path.join(output, componentManifestName(version)), bytes);
   return manifest;
+  });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href && process.platform === 'darwin') {
