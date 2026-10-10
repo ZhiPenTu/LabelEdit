@@ -6,7 +6,7 @@ import path from 'node:path';
 const MAX_BYTES = 2 * 1024 ** 3;
 export class RangeUnavailable extends Error {}
 export function validateArtifact(artifact, limit = MAX_BYTES) {
-  if (!artifact || !/^https:\/\/github\.com\/ZhiPenTu\/LabelEdit\/releases\/download\/v\d+\.\d+\.\d+\/[A-Za-z0-9._-]+$/.test(artifact.url)
+  if (!artifact || !/^https:\/\/github\.com\/ZhiPenTu\/(?:LabelEdit|qingzuo-desktop)\/releases\/download\/v\d+\.\d+\.\d+\/[A-Za-z0-9._-]+$/.test(artifact.url)
       || !/^[a-f0-9]{64}$/.test(artifact.sha256) || !Number.isSafeInteger(artifact.size) || artifact.size <= 0 || artifact.size > limit) throw new Error('更新下载信息无效。');
 }
 export async function withNoAsar(action) {

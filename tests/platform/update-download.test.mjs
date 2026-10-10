@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { mkdtemp, rm, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { downloadArtifact, downloadUpdateArchive, cachedFile, parseBlockmap, planDelta, pruneCache } from '../../desktop/update-download.mjs';
+import { downloadArtifact, downloadUpdateArchive, cachedFile, parseBlockmap, planDelta, pruneCache, validateArtifact } from '../../desktop/update-download.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const artifact = (bytes, name = 'update.zip') => ({ url: `https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/${name}`, size: bytes.length, sha256: digest(bytes) });
@@ -123,4 +123,12 @@ test('incorrect blockmap reuse is caught by the final hash and safely falls back
  const states = []; await downloadUpdateArchive(next, f.cache, s => states.push(s), f.options);
  assert.ok(states.some(s => s.fallbackReason?.includes('差量下载不可用')));
  assert.deepEqual(await readFile(cachedFile(f.cache, next)), Buffer.alloc(2000, 4));
+});
+
+test('validateArtifact accepts releases from both LabelEdit and qingzuo-desktop repositories', () => {
+  const sha256 = 'a'.repeat(64);
+  assert.doesNotThrow(() => validateArtifact({ url: 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.7/app.zip', sha256, size: 100 }));
+  assert.doesNotThrow(() => validateArtifact({ url: 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v0.2.8/app.zip', sha256, size: 100 }));
+  assert.throws(() => validateArtifact({ url: 'https://github.com/Other/qingzuo-desktop/releases/download/v0.2.8/app.zip', sha256, size: 100 }));
+  assert.throws(() => validateArtifact({ url: 'https://malicious.example/app.zip', sha256, size: 100 }));
 });

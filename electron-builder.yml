@@ -39,5 +39,5 @@ nsis:
 publish:
   provider: github
   owner: ZhiPenTu
-  repo: LabelEdit
+  repo: qingzuo-desktop
   releaseType: release

@@ -16,8 +16,8 @@ test('release notes display only the target version', () => {
 test('release checks select the archive with a fixed repository URL and verified digest metadata', async () => {
   let requested;
   const result = await checkGitHubRelease('0.2.0', { ...options(), fetchImpl: async (url, init) => { requested = url; assert.ok(init.signal); return new Response(JSON.stringify(release)); } });
-  assert.equal(requested, 'https://api.github.com/repos/ZhiPenTu/LabelEdit/releases/latest');
-  assert.deepEqual(result, { status: 'available', version: '0.2.4', notes: release.body, artifact: { url: 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/CommerceTools-0.2.4-mac-arm64.zip', size: 10, sha256: assets[0].digest.slice(7) } });
+  assert.equal(requested, 'https://api.github.com/repos/ZhiPenTu/qingzuo-desktop/releases/latest');
+  assert.deepEqual(result, { status: 'available', version: '0.2.4', notes: release.body, artifact: { url: 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v0.2.4/CommerceTools-0.2.4-mac-arm64.zip', size: 10, sha256: assets[0].digest.slice(7) } });
   assert.equal((await checkGitHubRelease('0.2.0', { ...options(), platform: 'win32', arch: 'x64' })).status, 'available');
   for (const version of ['0.2.4', '0.2.5', '0.2.6']) assert.deepEqual(await checkGitHubRelease(version, options()), { status: 'current', version: null, notes: '' });
 });
@@ -39,8 +39,8 @@ test('optional blockmaps and component manifests use repository-pinned URLs and 
   const components = { name: 'CommerceTools-0.2.4-mac-arm64.components.json', state: 'uploaded', size: 200, digest };
   const value = { ...release, assets: [...assets, blockmap, components] };
   const result = await checkGitHubRelease('0.2.3', options(value));
-  assert.equal(result.artifact.blockmap.url, 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/' + blockmap.name);
-  assert.equal(result.components.url, 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/' + components.name);
+  assert.equal(result.artifact.blockmap.url, 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v0.2.4/' + blockmap.name);
+  assert.equal(result.components.url, 'https://github.com/ZhiPenTu/qingzuo-desktop/releases/download/v0.2.4/' + components.name);
   const unsupported = await checkGitHubRelease('0.2.3', options({ ...value, assets: [...assets, { ...blockmap, digest: null }, { ...components, size: 100 * 1024 ** 2 }] }));
   assert.equal(unsupported.artifact.blockmap, undefined); assert.equal(unsupported.components, undefined);
   assert.equal((await checkGitHubRelease('0.2.3', { ...options(value), platform: 'win32', arch: 'x64' })).components, undefined);

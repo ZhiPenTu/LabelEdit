@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <script>
-      (() => { let theme = 'system'; try { const saved = localStorage.getItem('labeledit.theme.v1'); if (saved === 'light' || saved === 'dark') theme = saved; } catch {} const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.classList.toggle('dark', dark); document.documentElement.style.colorScheme = dark ? 'dark' : 'light'; })();
+      (() => { let theme = 'system'; try { const saved = localStorage.getItem('qingzuo.theme.v1') || localStorage.getItem('labeledit.theme.v1'); if (saved === 'light' || saved === 'dark') theme = saved; } catch {} const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.classList.toggle('dark', dark); document.documentElement.style.colorScheme = dark ? 'dark' : 'light'; })();
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

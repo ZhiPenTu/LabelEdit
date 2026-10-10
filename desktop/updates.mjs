@@ -1,7 +1,7 @@
 import semver from 'semver';
 
-const releaseRepository = 'https://github.com/ZhiPenTu/LabelEdit';
-const latestReleaseAPI = 'https://api.github.com/repos/ZhiPenTu/LabelEdit/releases/latest';
+const releaseRepository = 'https://github.com/ZhiPenTu/qingzuo-desktop';
+const latestReleaseAPI = 'https://api.github.com/repos/ZhiPenTu/qingzuo-desktop/releases/latest';
 
 function validateReleaseVersion(version) {
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version) || !semver.valid(version) || semver.lt(version, '0.2.0')) throw new Error('底座更新版本无效。');
