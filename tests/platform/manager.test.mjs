@@ -15,6 +15,7 @@ test('local plugin can install, persist, disable, enable, upgrade, rollback and 
   const stops = []; const manager = new PluginManager(path.join(root, 'plugins'), bundled, { stop: async id => stops.push(id) });
   try {
     await manager.initialize(); await manager.install(archive()); assert.equal((await manager.list())[0].version, '0.1.0');
+    assert.match(manager.state.plugins['local.fixture'].folder, /^installed\/local\.fixture\/[A-Za-z0-9_-]{22}$/);
     await manager.setEnabled('local.fixture', false); assert.equal((await manager.get('local.fixture')).enabled, false);
     await manager.setEnabled('local.fixture', true); await manager.install(archive('0.2.0')); assert.equal((await manager.get('local.fixture')).version, '0.2.0');
     await manager.rollback('local.fixture'); assert.equal((await manager.get('local.fixture')).version, '0.1.0');

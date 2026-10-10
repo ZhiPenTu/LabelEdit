@@ -89,7 +89,8 @@ export class PluginManager {
         const conflicts = (await this.list()).filter(p => p.id !== m.id && p.enabled && (p.services?.provides ?? []).some(service => m.services?.provides?.includes(service)));
         if (conflicts.length) throw new Error('服务已由其他插件提供：' + conflicts.map(p => p.title).join('、'));
         const previous = this.state.plugins[m.id] && !this.state.plugins[m.id].removed ? structuredClone(this.state.plugins[m.id]) : null;
-        const relative = 'installed/' + m.id + '/' + m.version + '-' + randomUUID();
+        const installationId = Buffer.from(randomUUID().replaceAll('-', ''), 'hex').toString('base64url');
+        const relative = 'installed/' + m.id + '/' + installationId;
         const folder = path.join(this.root, relative); await mkdir(path.dirname(folder), { recursive: true }); await rename(staged, folder);
         await this.stop(m.id);
         this.state.plugins[m.id] = { folder: relative, enabled: enabled ?? installed?.enabled ?? previous?.enabled ?? true, source, previous };
