@@ -19,7 +19,8 @@ test('pure platform installs a sandboxed Node plugin and supports uninstall/rein
     await app.evaluate(({ dialog }, filename) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] }); dialog.showMessageBox = async () => ({ response: 1 }); }, artifact);
     for (let iteration = 0; iteration < 2; iteration++) {
       await page.evaluate(() => window.commerceDesktop.invoke('plugins.import'));
-      await page.evaluate(() => window.commerceDesktop.invoke('view.open', { id: 'local.fixture-native' }));
+      await page.getByRole('button', { name: '工具中心', exact: true }).click();
+      await page.getByRole('button', { name: '打开工具', exact: true }).click();
       await expect.poll(() => app.context().pages().some(candidate => candidate.url().startsWith('commerce-plugin://local.fixture-native/'))).toBe(true);
       const plugin = app.context().pages().find(candidate => candidate.url().startsWith('commerce-plugin://local.fixture-native/'));
       await plugin.getByRole('button', { name: '运行示例' }).click();
