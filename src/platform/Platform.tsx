@@ -33,6 +33,7 @@ export default function Platform() {
   const [category, setCategory] = useState('all');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activePluginId, setActivePluginId] = useState<string | null>(null);
   const [market, setMarket] = useState<ToolEntry[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'ready' | 'error' | 'unavailable'>('loading');
   const [marketMessage, setMarketMessage] = useState('');
@@ -43,9 +44,12 @@ export default function Platform() {
   useEffect(() => { void refresh(); return window.commerceDesktop?.onChanged(() => { void refresh(); }); }, [refresh]);
   const run = async (method: string, args?: unknown) => {
     setBusy(true); setError(null);
+    if (args && typeof args === 'object' && 'id' in args && typeof (args as { id: unknown }).id === 'string') {
+      setActivePluginId((args as { id: string }).id);
+    }
     try { const value = await window.commerceDesktop?.invoke(method, args); await refresh(); return value; }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); throw e; }
-    finally { setBusy(false); }
+    finally { setBusy(false); setActivePluginId(null); }
   };
   const act = (method: string, args?: unknown) => { void run(method, args).catch(() => {}); };
   async function navigate(next: string, settings = false) {
@@ -99,7 +103,7 @@ export default function Platform() {
           <div className="tool-section-heading"><div><h2>{page === 'home' ? '我的工具' : title}</h2><span>{entries.length} 款工具</span></div><InputGroup className="commerce-search"><InputGroupInput aria-label="搜索工具" placeholder="搜索工具名称或用途" value={query} onChange={e => setQuery(e.target.value)} /><InputGroupAddon><Search /></InputGroupAddon></InputGroup></div>
           {page === 'market' && categories.length ? <div className="market-filters" role="group" aria-label="工具分类">{['all', ...categories].map(item => <Button key={item} variant={category === item ? 'default' : 'outline'} aria-pressed={category === item} onClick={() => setCategory(item)}>{item === 'all' ? '全部工具' : item}</Button>)}</div> : null}
           {page === 'market' && marketState === 'loading' ? <div className="market-loading" role="status"><LoaderCircle className="animate-spin" />正在加载插件目录…</div> : page === 'market' && (marketState === 'error' || marketState === 'unavailable') ? <Empty className="market-empty"><EmptyHeader><Store /><EmptyTitle>{marketState === 'error' ? '暂时无法加载插件市场' : desktop ? '插件目录尚未就绪' : '在桌面应用中发现更多工具'}</EmptyTitle><EmptyDescription>{marketMessage}</EmptyDescription></EmptyHeader>{desktop ? <Button variant="outline" onClick={() => setMarketRevision(value => value + 1)}><RefreshCw data-icon="inline-start" />重新加载</Button> : null}</Empty> : <>
-            <div className={cn('commerce-grid', page === 'market' ? 'market-grid' : 'tool-list')}>{results.map(entry => <PluginCard key={entry.id} entry={entry} installed={plugins.find(p => p.id === entry.id)} mode={page as 'home' | 'market' | 'plugins'} disabled={!desktop || busy} ready={status.kernel.ready} onOpen={settings => void navigate(entry.id, settings)} onAction={act} />)}</div>
+            <div className={cn('commerce-grid', page === 'market' ? 'market-grid' : 'tool-list')}>{results.map(entry => <PluginCard key={entry.id} entry={entry} installed={plugins.find(p => p.id === entry.id)} mode={page as 'home' | 'market' | 'plugins'} disabled={!desktop || busy} ready={status.kernel.ready} updating={activePluginId === entry.id} onOpen={settings => void navigate(entry.id, settings)} onAction={act} />)}</div>
             {!results.length ? <Empty><EmptyHeader><Search /><EmptyTitle>{query || category !== 'all' ? '没有找到工具' : '这里还没有工具'}</EmptyTitle><EmptyDescription>{query || category !== 'all' ? '换个关键词或分类，试试其他工具。' : '前往插件市场，或导入本地插件。'}</EmptyDescription></EmptyHeader>{query || category !== 'all' ? <Button variant="outline" onClick={() => { setQuery(''); setCategory('all'); }}>清除筛选</Button> : null}</Empty> : null}
           </>}
           {page === 'home' ? <button className="workspace-discover" onClick={() => void navigate('market')}><span className="discover-icon"><Plus /></span><span><strong>去插件市场，发现更多顺手工具</strong><small>按需扩展你的工作台，工具可以独立安装与更新。</small></span><ArrowRight /></button> : null}

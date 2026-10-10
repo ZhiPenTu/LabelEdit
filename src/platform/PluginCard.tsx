@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { ArrowRight, Check, ChevronDown, FileText, Image, Puzzle } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, FileText, Image, LoaderCircle, Puzzle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -14,16 +14,16 @@ export interface Plugin extends ToolEntry {
 }
 export function toolCategory(tool: ToolEntry) { return tool.category || '其他工具'; }
 interface PluginCardProps {
-  entry: ToolEntry; installed?: Plugin; mode: 'home' | 'market' | 'plugins'; disabled: boolean; ready: boolean;
+  entry: ToolEntry; installed?: Plugin; mode: 'home' | 'market' | 'plugins'; disabled: boolean; ready: boolean; updating?: boolean;
   onOpen: (settings?: boolean) => void; onAction: (method: string, args: unknown) => void;
 }
-export function PluginCard({ entry, installed, mode, disabled, ready, onOpen, onAction }: PluginCardProps) {
+export function PluginCard({ entry, installed, mode, disabled, ready, updating, onOpen, onAction }: PluginCardProps) {
   const isLabel = entry.id === 'official.labeledit';
   const isCutout = entry.id === 'official.removebg';
   const Icon = isLabel ? FileText : isCutout ? Image : Puzzle;
   // A stale catalog must not offer a downgrade of a newer bundled/local tool.
   const current = installed ? gte(installed.version, entry.version) : false;
-  return <Card className={cn('plugin-card', mode !== 'market' && 'plugin-row', isCutout && 'plugin-image')}>
+  return <Card className={cn('plugin-card', mode !== 'market' && 'plugin-row', isCutout && 'plugin-image', updating && 'is-updating')}>
     <CardHeader>
       <span className="commerce-tool-icon"><Icon /></span>
       <div className="plugin-info">
@@ -40,9 +40,13 @@ export function PluginCard({ entry, installed, mode, disabled, ready, onOpen, on
       </> : <p className="plugin-state">v{entry.version} · {installed?.enabled ? '已启用' : '已停用'}{installed?.missing.length ? ' · 缺少服务依赖' : ''} · {({ bundled: '内置插件', local: '本地导入', market: '市场签名验证' }[installed?.source ?? ''] ?? installed?.source)}</p>}
       {mode === 'plugins' && entry.releaseNotes ? <details className="plugin-notes"><summary>版本说明<ChevronDown /></summary><Suspense fallback={<span>加载更新说明…</span>}><ReleaseNotes body={entry.releaseNotes} /></Suspense></details> : null}
       {installed?.error ? <p role="alert" className="text-destructive">{installed.error}</p> : null}
+      {updating ? <div className="plugin-update-progress" aria-busy="true" aria-live="polite">
+        <div className="plugin-update-bar"><div className="plugin-update-shimmer" /></div>
+        <span className="plugin-update-hint"><LoaderCircle className="animate-spin" />{installed ? '正在下载并安装新版本…' : '正在下载并安装插件…'}</span>
+      </div> : null}
     </CardContent>
     <CardFooter>
-      {mode === 'market' ? <><span className="plugin-version">v{entry.version}</span>{current ? <span className="plugin-installed"><Check />已安装</span> : null}<Button disabled={disabled || current || entry.compatible === false} onClick={() => onAction('market.install', { id: entry.id })}>{entry.compatible === false ? '需要升级轻作' : current ? '已安装' : installed ? '更新插件' : '安装插件'}</Button></> : mode === 'plugins' ? <>
+      {mode === 'market' ? <><span className="plugin-version">v{entry.version}</span>{current ? <span className="plugin-installed"><Check />已安装</span> : null}<Button disabled={disabled || current || entry.compatible === false} aria-label={updating ? (installed ? '更新插件' : '安装插件') : undefined} onClick={() => onAction('market.install', { id: entry.id })}>{entry.compatible === false ? '需要升级轻作' : current ? '已安装' : updating ? <><LoaderCircle data-icon="inline-start" className="animate-spin" />{installed ? '更新中…' : '安装中…'}</> : installed ? '更新插件' : '安装插件'}</Button></> : mode === 'plugins' ? <>
         <Button variant="outline" disabled={disabled} onClick={() => onAction('plugins.enable', { id: entry.id, enabled: !installed?.enabled })}>{installed?.enabled ? '停用' : '启用'}</Button>
         {installed?.settings ? <Button variant="outline" disabled={disabled || !installed.enabled} onClick={() => onOpen(true)}>插件设置</Button> : null}
         <Button variant="ghost" disabled={disabled} onClick={() => onAction('plugins.rollback', { id: entry.id })}>恢复版本</Button>
