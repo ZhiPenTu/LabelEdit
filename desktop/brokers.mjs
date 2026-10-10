@@ -4,11 +4,15 @@ import { randomUUID } from 'node:crypto';
 import {secureRequest} from './network-transport.mjs';
 import { allowedNetwork } from './security.mjs';
 export class FileBroker {
-  constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); }
+  constructor(root, dialog) { this.root = root; this.dialog = dialog; this.tokens = new Map(); this.epochs = new Map(); }
+  async initialize() { await rm(this.root, { recursive: true, force: true }); }
   async create(plugin, bytes, name, mime = 'application/octet-stream') {
+    if (!plugin.permissions.files) throw new Error('插件没有文件权限。');
     if (bytes.length > 64 * 1024 * 1024) throw new Error('文件内容过大。');
+    const epoch = this.epochs.get(plugin.id) ?? 0;
     const dir = path.join(this.root, plugin.id); await mkdir(dir, { recursive: true, mode: 0o700 });
     const token = randomUUID(), filename = path.join(await realpath(dir), token); await writeFile(filename, bytes, { mode: 0o600 });
+    if ((this.epochs.get(plugin.id) ?? 0) !== epoch) { await rm(filename, { force: true }); throw new Error('文件未授权或已失效。'); }
     const item = { token, name: path.basename(name), size: bytes.length, mime };
     this.tokens.set(token, { ...item, filename, owner: plugin.id }); return item;
   }
@@ -43,7 +47,7 @@ export class FileBroker {
     const result = await this.dialog.showSaveDialog({ title: plugin.title + ' · 保存文件', defaultPath: path.basename(filename || item.name) });
     if (result.canceled) return false; await copyFile(item.filename, result.filePath); return true;
   }
-  async revoke(id) { const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
+  async revoke(id) { this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1); const pending = []; for (const [key, value] of this.tokens) if (value.owner === id) { this.tokens.delete(key); pending.push(rm(value.filename, { force: true })); } await Promise.all(pending); }
 }
 export class NetworkBroker {
   constructor(files, credentials, request = secureRequest) { this.files = files; this.credentials = credentials; this.request = request; this.tasks = new Map(); }

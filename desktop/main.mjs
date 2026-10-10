@@ -262,6 +262,7 @@ await app.whenReady();
 migration = await preparePluginMigration(app.getPath('userData'));
 await mkdir(app.getPath('userData'), { recursive: true });
 credentials = new Credentials(launcher, 'profile.' + createHash('sha256').update(app.getPath('userData')).digest('hex').slice(0,16) + ':'); files = new FileBroker(path.join(app.getPath('userData'), 'files'), dialog); network = new NetworkBroker(files, credentials);
+await files.initialize();
 workers = new Workers(path.join(app.getPath('userData'), 'jobs'), launcher, process.execPath);
 await workers.recover().catch(error => { workers.recoveryError = error.message; console.error('沙箱任务恢复失败：',error.message); });
 const marketConfig = JSON.parse(await readFile(path.join(generated, 'market.json'), 'utf8'));

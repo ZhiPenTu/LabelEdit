@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { FileBroker, NetworkBroker } from '../../desktop/brokers.mjs';
@@ -9,6 +9,20 @@ test('file tokens are private per plugin and become invalid on disposal', async 
   const root = await mkdtemp(path.join(os.tmpdir(), 'commerce-files-')); const files = new FileBroker(root, {});
   try { const file = await files.create(plugin, Buffer.from('test'), 'a.png', 'image/png'); assert.equal((await files.read(plugin, file.token)).data, Buffer.from('test').toString('base64')); await assert.rejects(files.read({ ...plugin, id: 'local.b' }, file.token)); await files.revoke(plugin.id); await assert.rejects(files.read(plugin, file.token)); }
   finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('closing a tool invalidates in-flight file creation and restart removes orphaned temporary files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-file-disposal-')), files = new FileBroker(root, {});
+  try {
+    const pending = files.create(plugin, Buffer.from('late'), 'late.png', 'image/png');
+    await files.revoke(plugin.id);
+    await assert.rejects(pending, /失效/);
+    assert.equal(files.tokens.size, 0);
+    const item = await files.create(plugin, Buffer.from('orphan'), 'orphan.png', 'image/png');
+    const filename = (await files.get(plugin, item.token)).filename;
+    const restarted = new FileBroker(root, {}); await restarted.initialize();
+    await assert.rejects(access(filename));
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('generic response limits distinguish ordinary and private file responses without retrying', async () => {
