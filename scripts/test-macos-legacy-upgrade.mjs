@@ -79,7 +79,8 @@ try {
   helper.ref();
   await new Promise((resolve, reject) => helper.once('exit', code => code === 0 ? resolve() : reject(new Error('Replacement failed.'))));
   const processes = execFileSync('/bin/ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
-  for (const line of processes.split('\n')) if (line.includes(executablePath) && line.includes('--user-data-dir=' + profile)) { const match = line.match(/^\s*(\d+)/); if (match) process.kill(Number(match[1]), 'SIGTERM'); }
+  const relaunchedExecutable = path.join(prepared.target, 'Contents/MacOS/Qingzuo');
+  for (const line of processes.split('\n')) if (line.includes(relaunchedExecutable) && line.includes('--user-data-dir=')) { const match = line.match(/^\s*(\d+)/); if (match) process.kill(Number(match[1]), 'SIGTERM'); }
   await new Promise(resolve => setTimeout(resolve, 1000));
   app = await _electron.launch({ executablePath, cwd: temporary, args: ['--user-data-dir=' + profile] });
   const updated = await app.firstWindow();
