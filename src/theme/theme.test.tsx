@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ThemeProvider, useTheme } from './ThemeProvider';
-import { readTheme, THEME_KEY } from './theme';
+import { readTheme, THEME_KEY, LEGACY_THEME_KEY } from './theme';
 afterEach(() => { cleanup(); localStorage.clear(); document.documentElement.classList.remove('dark'); vi.restoreAllMocks(); });
 it('follows system changes and persists an explicit preference', () => {
   let listener!: () => void;
@@ -21,6 +21,10 @@ it('follows system changes and persists an explicit preference', () => {
   unmount();
   expect(media.removeEventListener).toHaveBeenCalled();
   expect(readTheme()).toBe('light');
+});
+it('falls back to legacy theme key when new key is not set', () => {
+  localStorage.setItem(LEGACY_THEME_KEY, 'dark');
+  expect(readTheme()).toBe('dark');
 });
 it('ignores invalid saved values and handles unavailable storage', () => {
   localStorage.setItem(THEME_KEY, 'invalid');

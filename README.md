@@ -1,6 +1,6 @@
-# 轻作 Qingzuo
+# 轻作桌面端底座 (qingzuo-desktop)
 
-轻作是基于 Electron、DeepSeek Harness 和系统沙箱的插件桌面工作台。v0.2.7 起安装包只包含底座，业务工具从独立插件市场按需安装。
+轻作是基于 Electron、DeepSeek Harness 和系统沙箱的插件桌面工作台。v0.2.7 起安装包只包含底座（`qingzuo-desktop`），业务工具从独立插件市场按需安装。
 
 - LabelEdit: https://github.com/ZhiPenTu/qingzuo-plugin-labeledit
 - AI 抠图: https://github.com/ZhiPenTu/qingzuo-plugin-removebg
