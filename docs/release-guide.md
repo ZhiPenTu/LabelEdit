@@ -12,6 +12,8 @@ Validate commerce desktop 验证通用契约、沙箱、空工具中心、外部
 
 macOS 新组件仅有 core、electron、dependencies，保留旧组件清单读取兼容性。签名、完整性、差量回退、重启与恢复保持原有流程。Windows 继续使用 electron-updater。
 
+更新器使用 original-fs 读取真实 ASAR 文件，不经过 Electron 的虚拟目录解释。新组件使用版本 2 签名域，同时接受版本 1 旧签名。v0.2.5 的组件读取受 ASAR 虚拟文件系统影响，因此它会在组件签名检查阶段安全转入完整 ZIP 升级，避免开始错误的组件重建；升级到 v0.2.7 后恢复组件更新。此兼容回退不是迁移过渡版。
+
 ## SDK 与插件
 
 sdk-v1.1.0 首次发布后，测试辅助入口的可见视图修正以 sdk-v1.1.1 发布，不覆盖原制品；运行时 API 仍为 1.1.0。两个版本设置 latest=false，不干扰桌面升级。独立插件用固定 sdk-v1.1.1 Release URL 和 lockfile integrity 安装 SDK。

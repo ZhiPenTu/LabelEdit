@@ -1,10 +1,11 @@
 import { createPublicKey, sign, verify } from 'node:crypto';
-import { chmod, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, symlink, writeFile } from './update-fs.mjs';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
 import { downloadArtifact, fileDigest, matchesArtifact, cachedFile, pruneCache, validateArtifact } from './update-download.mjs';
 
-const DOMAIN = Buffer.from('Qingzuo desktop component update v1\0');
+const DOMAIN = Buffer.from('Qingzuo desktop component update v2\0');
+const LEGACY_DOMAIN = Buffer.from('Qingzuo desktop component update v1\0');
 const IDS = new Set(['core', 'electron', 'dependencies', 'ocr-runtime', 'ocr-models', 'plugin-code']);
 const MAX_MANIFEST = 16 * 1024 ** 2;
 const MAX_EXPANDED = 4 * 1024 ** 3;
@@ -110,7 +111,7 @@ export function validateComponentManifest(value, version) {
 export function signComponentManifest(manifest, privateKey) {
   validateComponentManifest(manifest, manifest.version);
   const payload = Buffer.from(JSON.stringify(manifest));
-  return Buffer.from(JSON.stringify({ payload: payload.toString('base64'), signature: sign(null, Buffer.concat([DOMAIN, payload]), privateKey).toString('base64') }));
+  return Buffer.from(JSON.stringify({ signatureVersion: 2, payload: payload.toString('base64'), signature: sign(null, Buffer.concat([DOMAIN, payload]), privateKey).toString('base64') }));
 }
 
 export function readComponentManifest(bytes, publicKey, version) {
@@ -119,7 +120,9 @@ export function readComponentManifest(bytes, publicKey, version) {
   if (typeof envelope.payload !== 'string' || typeof envelope.signature !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(envelope.payload)
     || !/^[A-Za-z0-9+/]{86}==$/.test(envelope.signature)) throw new Error('组件清单签名格式无效。');
   const payload = Buffer.from(envelope.payload, 'base64'), key = createPublicKey(publicKey);
-  if (key.asymmetricKeyType !== 'ed25519' || !verify(null, Buffer.concat([DOMAIN, payload]), key, Buffer.from(envelope.signature, 'base64'))) throw new Error('组件更新签名验证失败。');
+  if (![undefined, 1, 2].includes(envelope.signatureVersion)) throw new Error('组件签名版本不受支持。');
+  const domain = envelope.signatureVersion === 2 ? DOMAIN : LEGACY_DOMAIN;
+  if (key.asymmetricKeyType !== 'ed25519' || !verify(null, Buffer.concat([domain, payload]), key, Buffer.from(envelope.signature, 'base64'))) throw new Error('组件更新签名验证失败。');
   return validateComponentManifest(JSON.parse(payload.toString('utf8')), version);
 }
 

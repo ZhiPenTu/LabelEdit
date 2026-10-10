@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { mkdir, open, readFile, rename, rm, stat, writeFile, readdir } from 'node:fs/promises';
+import { createReadStream, mkdir, open, readFile, rename, rm, stat, writeFile, readdir } from './update-fs.mjs';
 import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 
