@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, mkdir, writeFile, access, cp, stat } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import os from 'node:os';
-import { applicationBundle, prepareMacUpdate, launchMacInstaller, previousUpdateError } from '../../desktop/mac-update.mjs';
+import { applicationBundle, prepareMacUpdate, launchMacInstaller, previousUpdateError, macUpdateAdapter } from '../../desktop/mac-update.mjs';
+import { safeRm, cachedFile } from '../../desktop/update-download.mjs';
 const execute = promisify(execFile);
 test('update targets reject disk images, translocated applications and development executables', { skip: process.platform !== 'darwin' }, () => {
   assert.equal(applicationBundle('/Applications/Commerce Tools.app/Contents/MacOS/Commerce Tools'), '/Applications/Commerce Tools.app');
@@ -74,4 +75,85 @@ test('detached macOS helper waits for exit, replaces the app, relaunches it and 
     assert.match(await previousUpdateError(receipt), /恢复原版本/);
     assert.equal(await previousUpdateError(receipt), null);
   } finally { await rm(folder, { recursive: true, force: true }); }
+});
+
+test('safeRm recursively removes staging trees containing app.asar and ignores ENOENT', { skip: process.platform !== 'darwin' }, async () => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'safe-rm-test-'));
+  try {
+    const resources = path.join(folder, 'Qingzuo.app', 'Contents', 'Resources');
+    await mkdir(resources, { recursive: true });
+    await writeFile(path.join(resources, 'app.asar'), 'mock-asar-content');
+    await safeRm(path.join(folder, 'Qingzuo.app'));
+    await assert.rejects(access(path.join(folder, 'Qingzuo.app')));
+    await safeRm(path.join(folder, 'non-existent'));
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test('macUpdateAdapter falls back to full package and cleans up component staging without ENOTEMPTY', { skip: process.platform !== 'darwin', timeout: 60000 }, async () => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'qingzuo-adapter-'));
+  try {
+    const appsDir = path.join(folder, 'Applications');
+    await mkdir(appsDir, { recursive: true });
+    const target = await makeBundle(appsDir, 'Qingzuo');
+    const userData = path.join(folder, 'userData');
+    const archives = path.join(userData, 'updates', 'archives');
+    await mkdir(archives, { recursive: true });
+    const receipt = path.join(folder, 'receipt.txt');
+
+    const releaseApp = await makeBundle(folder, 'ReleaseApp');
+    const archive = path.join(folder, 'release.zip');
+    await execute('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', releaseApp, archive]);
+    const { size } = await stat(archive);
+    const { createHash } = await import('node:crypto');
+    const sha = createHash('sha256').update(await readFile(archive)).digest('hex');
+
+    const artifact = {
+      url: 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/CommerceTools-0.2.4-mac-arm64.zip',
+      size,
+      sha256: sha,
+    };
+    await cp(archive, cachedFile(archives, artifact));
+
+    const fakeApp = {
+      getPath(name) {
+        if (name === 'exe') return path.join(target, 'Contents/MacOS/fixture');
+        if (name === 'userData') return userData;
+        throw new Error('unknown name: ' + name);
+      },
+      quit() {}
+    };
+
+    const adapter = macUpdateAdapter({
+      app: fakeApp,
+      beforeInstall: async () => {},
+      receipt,
+      publicKey: 'mock-key',
+    });
+
+    const notifications = [];
+    const release = {
+      version: '0.2.4',
+      components: {
+        url: 'https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/invalid.components.json',
+        size: 100,
+        sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+      },
+      artifact,
+    };
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('网络不可用（测试模拟）'); };
+    try {
+      const result = await adapter.download(release, s => notifications.push(s));
+      assert.ok(result.prepared.endsWith('ReleaseApp.app'));
+      assert.ok(notifications.some(n => n.fallbackReason && n.fallbackReason.includes('组件更新暂不可用')));
+      await safeRm(result.staging);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
 });

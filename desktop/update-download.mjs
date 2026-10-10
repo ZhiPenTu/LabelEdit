@@ -9,14 +9,36 @@ export function validateArtifact(artifact, limit = MAX_BYTES) {
   if (!artifact || !/^https:\/\/github\.com\/ZhiPenTu\/LabelEdit\/releases\/download\/v\d+\.\d+\.\d+\/[A-Za-z0-9._-]+$/.test(artifact.url)
       || !/^[a-f0-9]{64}$/.test(artifact.sha256) || !Number.isSafeInteger(artifact.size) || artifact.size <= 0 || artifact.size > limit) throw new Error('更新下载信息无效。');
 }
+export async function withNoAsar(action) {
+  const previous = process.noAsar;
+  process.noAsar = true;
+  try { return await action(); }
+  finally { process.noAsar = previous; }
+}
+
+export async function safeRm(target) {
+  if (!target) return;
+  return withNoAsar(async () => {
+    try {
+      await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  });
+}
+
 export async function fileDigest(filename) {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(filename)) hash.update(chunk);
-  return hash.digest('hex');
+  return withNoAsar(async () => {
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(filename)) hash.update(chunk);
+    return hash.digest('hex');
+  });
 }
 export async function matchesArtifact(filename, artifact) {
-  try { return (await stat(filename)).size === artifact.size && await fileDigest(filename) === artifact.sha256; }
-  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  return withNoAsar(async () => {
+    try { return (await stat(filename)).size === artifact.size && await fileDigest(filename) === artifact.sha256; }
+    catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  });
 }
 export const cachedFile = (cache, artifact) => path.join(cache, artifact.sha256 + '.bin');
 const sizeOf = async filename => { try { return (await stat(filename)).size; } catch (error) { if (error.code === 'ENOENT') return 0; throw error; } };
@@ -56,9 +78,9 @@ export async function downloadArtifact(artifact, cache, notify = () => {}, optio
   validateArtifact(artifact); await mkdir(cache, { recursive: true, mode: 0o700 });
   const filename = cachedFile(cache, artifact), partial = filename + '.part';
   if (await matchesArtifact(filename, artifact)) { notify({ mode: 'cached', progress: 100, transferred: 0, total: 0, reusedBytes: artifact.size }); return filename; }
-  await rm(filename, { force: true });
+  await safeRm(filename);
   let offset = await sizeOf(partial);
-  if (offset > artifact.size) { await rm(partial); offset = 0; }
+  if (offset > artifact.size) { await safeRm(partial); offset = 0; }
   let transferred = offset;
   const progress = count => { transferred += count; notify({ mode: offset ? 'resume' : 'full', progress: transferred / artifact.size * 100, transferred, total: artifact.size, reusedBytes: 0 }); };
   progress(0);
@@ -66,11 +88,11 @@ export async function downloadArtifact(artifact, cache, notify = () => {}, optio
     if (offset < artifact.size) await transfer(artifact, partial, offset, artifact.size, progress, options);
   } catch (error) {
     if (!(error instanceof RangeUnavailable)) throw error;
-    await rm(partial, { force: true }); offset = 0; transferred = 0;
+    await safeRm(partial); offset = 0; transferred = 0;
     notify({ fallbackReason: '服务器不支持续传，正在重新下载完整更新。' });
     progress(0); await transfer(artifact, partial, 0, artifact.size, progress, options);
   }
-  if (!await matchesArtifact(partial, artifact)) { await rm(partial, { force: true }); throw new Error('安装包完整性校验失败，请重新下载。'); }
+  if (!await matchesArtifact(partial, artifact)) { await safeRm(partial); throw new Error('安装包完整性校验失败，请重新下载。'); }
   await rename(partial, filename); return filename;
 }
 
@@ -104,7 +126,7 @@ export function planDelta(previous, next) {
 async function reconstruct(artifact, base, plan, cache, notify, options) {
   const filename = cachedFile(cache, artifact), partial = filename + '.delta';
   let written = await sizeOf(partial);
-  if (written > artifact.size) { await rm(partial); written = 0; }
+  if (written > artifact.size) { await safeRm(partial); written = 0; }
   const total = plan.reduce((sum, op) => sum + (op.copy ? 0 : op.size), 0);
   let transferred = 0, outputOffset = 0;
   const emit = () => notify({ mode: 'delta', progress: total ? transferred / total * 100 : 100, transferred, total, reusedBytes: artifact.size - total });
@@ -125,7 +147,7 @@ async function reconstruct(artifact, base, plan, cache, notify, options) {
       } finally { await output.close(); }
     } else await transfer(artifact, partial, op.start + completed, op.start + op.size, count => { transferred += count; emit(); }, options);
   }
-  if (!await matchesArtifact(partial, artifact)) { await rm(partial, { force: true }); throw new RangeUnavailable('差量合成校验未通过。'); }
+  if (!await matchesArtifact(partial, artifact)) { await safeRm(partial); throw new RangeUnavailable('差量合成校验未通过。'); }
   await rename(partial, filename); return filename;
 }
 
@@ -151,7 +173,7 @@ export async function downloadUpdateArchive(artifact, cache, notify, options = {
     catch (error) {
       options.signal?.throwIfAborted();
       if (!(error instanceof RangeUnavailable)) throw error;
-      await rm(cachedFile(cache, artifact) + '.delta', { force: true });
+      await safeRm(cachedFile(cache, artifact) + '.delta');
       notify({ fallbackReason: '差量下载不可用，已改为完整更新。' });
     }
   }
@@ -170,6 +192,6 @@ export async function pruneCache(cache, keep = [], maxAge = 7 * 86400000) {
   for (const name of await readdir(cache)) {
     if (!/^[a-f0-9]{64}\.bin(?:\.part|\.delta)?$/.test(name) || keep.includes(name.slice(0, 64))) continue;
     const filename = path.join(cache, name), info = await stat(filename);
-    if (name.endsWith('.bin') || Date.now() - info.mtimeMs > maxAge) await rm(filename, { force: true });
+    if (name.endsWith('.bin') || Date.now() - info.mtimeMs > maxAge) await safeRm(filename);
   }
 }

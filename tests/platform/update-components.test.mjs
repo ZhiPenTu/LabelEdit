@@ -10,7 +10,7 @@ import path from 'node:path';
 import AdmZip from 'adm-zip';
 import { buildComponentArtifacts } from '../../scripts/component-artifacts.mjs';
 import { prepareComponentUpdate, readComponentManifest, signComponentManifest, validateComponentManifest, verifyBundleInventory, componentManifestName } from '../../desktop/update-components.mjs';
-import { cachedFile } from '../../desktop/update-download.mjs';
+import { cachedFile, withNoAsar } from '../../desktop/update-download.mjs';
 import { verifyMacBundle } from '../../desktop/mac-update.mjs';
 
 const execute = promisify(execFile), mac = { skip: process.platform !== 'darwin' };
@@ -32,8 +32,10 @@ async function fixture(t) {
   await mkdir(path.join(target, 'Contents/MacOS')); await cp('/usr/bin/true', path.join(target, 'Contents/MacOS/Qingzuo')); await chmod(path.join(target, 'Contents/MacOS/Qingzuo'), 0o755);
   await symlink('runtime', path.join(target, 'Contents/Resources/commerce/plugins/official.labeledit/backend/runtime-link'));
   await execute('/usr/bin/codesign', ['--force', '--sign', '-', target]);
-  await cp(target, installed, { recursive: true, verbatimSymlinks: true });
-  await writeFile(path.join(installed, 'Contents/Resources/app.asar'), 'old UI');
+  await withNoAsar(async () => {
+    await cp(target, installed, { recursive: true, verbatimSymlinks: true });
+    await writeFile(path.join(installed, 'Contents/Resources/app.asar'), 'old UI');
+  });
   const manifest = await buildComponentArtifacts({ bundle: target, output, version: '0.2.4', privateKey: keys.privateKey });
   const name = componentManifestName('0.2.4'), bytes = await readFile(path.join(output, name));
   const manifestArtifact = { url: `https://github.com/ZhiPenTu/LabelEdit/releases/download/v0.2.4/${name}`, size: bytes.length, sha256: sha256(bytes) };
@@ -62,7 +64,7 @@ test('a signed component update reuses unchanged installed runtimes and reconstr
   await verifyBundleInventory(bundle, f.manifest.files); await verifyMacBundle(bundle, '0.2.4');
   const core = f.manifest.components.find(c => c.id === 'core');
   assert.equal(states.at(-1).total, core.artifact.size); assert.ok(states.at(-1).reusedBytes > 110000);
-  assert.equal(await readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8'), 'old UI');
+  assert.equal(await withNoAsar(() => readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8')), 'old UI');
   const second = path.join(f.root, 'again');
   await buildComponentArtifacts({ bundle: f.target, output: second, version: '0.2.4', privateKey: keys.privateKey });
   for (const c of f.manifest.components) assert.equal(sha256(await readFile(path.join(second, path.basename(c.artifact.url)))), c.artifact.sha256);
@@ -81,7 +83,7 @@ test('changed, missing and corrupted installed components are fetched, and valid
 
 test('changing the frozen plugin entry downloads plugin code while reusing Python libraries and models', mac, async t => {
   const f = await fixture(t);
-  await cp(path.join(f.target, 'Contents/Resources/app.asar'), path.join(f.installed, 'Contents/Resources/app.asar'));
+  await withNoAsar(() => cp(path.join(f.target, 'Contents/Resources/app.asar'), path.join(f.installed, 'Contents/Resources/app.asar')));
   await writeFile(path.join(f.installed, 'Contents/Resources/commerce/plugins/official.labeledit/backend/label-edit-backend/label-edit-backend'), 'previous code');
   const bundle = await f.prepare(); await verifyMacBundle(bundle, '0.2.4');
   assert.deepEqual(f.requests.map(r => r.name), [componentManifestName('0.2.4'), 'CommerceTools-0.2.4-mac-arm64.plugin-code.zip']);
@@ -100,7 +102,7 @@ test('component download cancellation resumes the exact partial archive without 
   assert.ok(partial > 0 && partial < core.artifact.size);
   f.requests.length = 0; await f.prepare({ manifestArtifact });
   assert.equal(f.requests[0].range, `bytes=${partial}-${core.artifact.size - 1}`);
-  assert.equal(await readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8'), 'old UI');
+  assert.equal(await withNoAsar(() => readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8')), 'old UI');
 });
 
 test('manifest signatures bind product, platform and version and reject plugin-domain signatures', mac, async t => {
@@ -142,7 +144,7 @@ test('a signed archive with an unexpected path never reaches installation', mac,
   await writeFile(path.join(f.output, path.basename(core.artifact.url)), bytes); core.artifact.size = bytes.length; core.artifact.sha256 = sha256(bytes);
   const envelope = signComponentManifest(value, keys.privateKey); await writeFile(path.join(f.output, componentManifestName('0.2.4')), envelope);
   await assert.rejects(f.prepare({ manifestArtifact: { ...f.manifestArtifact, size: envelope.length, sha256: sha256(envelope) } }), /非法文件/);
-  assert.equal(await readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8'), 'old UI');
+  assert.equal(await withNoAsar(() => readFile(path.join(f.installed, 'Contents/Resources/app.asar'), 'utf8')), 'old UI');
   await assert.rejects(stat(path.join(f.root, 'outside')));
 });
 

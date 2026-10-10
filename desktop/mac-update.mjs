@@ -3,7 +3,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { checkGitHubRelease } from './updates.mjs';
-import { downloadUpdateArchive } from './update-download.mjs';
+import { downloadUpdateArchive, safeRm, withNoAsar } from './update-download.mjs';
 import { prepareComponentUpdate } from './update-components.mjs';
 
 const execute = promisify(execFile);
@@ -21,22 +21,26 @@ async function plist(bundle, key) {
 }
 
 export async function prepareMacUpdate(archive, staging, version, signal) {
-  const extracted = path.join(staging, 'extracted');
-  await mkdir(extracted);
-  await execute('/usr/bin/ditto', ['-x', '-k', archive, extracted], { timeout: 5 * 60_000, signal });
-  const entries = await readdir(extracted, { withFileTypes: true });
-  const bundles = entries.filter(entry => entry.isDirectory() && entry.name.endsWith('.app'));
-  if (bundles.length !== 1) throw new Error('更新包必须包含一个应用。');
-  const bundle = path.join(extracted, bundles[0].name);
-  return verifyMacBundle(bundle, version, signal);
+  return withNoAsar(async () => {
+    const extracted = path.join(staging, 'extracted');
+    await mkdir(extracted);
+    await execute('/usr/bin/ditto', ['-x', '-k', archive, extracted], { timeout: 5 * 60_000, signal });
+    const entries = await readdir(extracted, { withFileTypes: true });
+    const bundles = entries.filter(entry => entry.isDirectory() && entry.name.endsWith('.app'));
+    if (bundles.length !== 1) throw new Error('更新包必须包含一个应用。');
+    const bundle = path.join(extracted, bundles[0].name);
+    return verifyMacBundle(bundle, version, signal);
+  });
 }
 
 export async function verifyMacBundle(bundle, version, signal) {
-  if (await plist(bundle, 'CFBundleIdentifier') !== bundleID || await plist(bundle, 'CFBundleShortVersionString') !== version) throw new Error('更新包的应用标识或版本不匹配。');
-  const executable = await plist(bundle, 'CFBundleExecutable');
-  if (path.basename(executable) !== executable || !(await stat(path.join(bundle, 'Contents/MacOS', executable))).isFile()) throw new Error('更新包缺少有效的启动程序。');
-  await execute('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle], { timeout: 5 * 60_000, signal });
-  return bundle;
+  return withNoAsar(async () => {
+    if (await plist(bundle, 'CFBundleIdentifier') !== bundleID || await plist(bundle, 'CFBundleShortVersionString') !== version) throw new Error('更新包的应用标识或版本不匹配。');
+    const executable = await plist(bundle, 'CFBundleExecutable');
+    if (path.basename(executable) !== executable || !(await stat(path.join(bundle, 'Contents/MacOS', executable))).isFile()) throw new Error('更新包缺少有效的启动程序。');
+    await execute('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle], { timeout: 5 * 60_000, signal });
+    return bundle;
+  });
 }
 
 export async function launchMacInstaller({ target, prepared, staging, receipt, profile, parent = process.pid }) {
@@ -82,7 +86,7 @@ export function macUpdateAdapter({ app, beforeInstall, receipt, publicKey }) {
             await verifyMacBundle(prepared, release.version, controller.signal);
           } catch (error) {
             controller.signal.throwIfAborted();
-            await rm(path.join(staging, 'Qingzuo.app'), { recursive: true, force: true }); prepared = null;
+            try { await safeRm(path.join(staging, 'Qingzuo.app')); } catch {} prepared = null;
             progress({ fallbackReason: '组件更新暂不可用，正在使用安装包更新。', mode: 'full', reusedBytes: 0, progress: 0, transferred: 0, total: release.artifact.size });
           }
         }
@@ -93,7 +97,7 @@ export function macUpdateAdapter({ app, beforeInstall, receipt, publicKey }) {
         }
         controller.signal.throwIfAborted();
         return { target, prepared, staging, receipt, profile: app.getPath('userData') };
-      } catch (error) { await rm(staging, { recursive: true, force: true }); throw error; }
+      } catch (error) { await safeRm(staging); throw error; }
       finally { active = null; }
     },
     async install(prepared) {
@@ -104,7 +108,7 @@ export function macUpdateAdapter({ app, beforeInstall, receipt, publicKey }) {
         app.quit();
       } catch (error) {
         helper?.kill();
-        await rm(prepared.staging, { recursive: true, force: true });
+        await safeRm(prepared.staging);
         throw error;
       }
     },
@@ -112,6 +116,6 @@ export function macUpdateAdapter({ app, beforeInstall, receipt, publicKey }) {
 }
 
 export async function previousUpdateError(receipt) {
-  try { const error = await readFile(receipt, 'utf8'); await rm(receipt); return error.trim(); }
+  try { const error = await readFile(receipt, 'utf8'); await safeRm(receipt); return error.trim(); }
   catch (error) { if (error.code !== 'ENOENT') throw error; return null; }
 }
