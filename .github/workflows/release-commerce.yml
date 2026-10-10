@@ -89,6 +89,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      COMMERCE_PLUGIN_PUBLIC_KEY: ${{ vars.COMMERCE_PLUGIN_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -98,3 +99,18 @@ jobs:
           merge-multiple: true
       - name: Publish validated release
         run: gh release create "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.exe release/desktop/*.blockmap release/desktop/latest*.yml release/components/* --verify-tag --title "轻作 Qingzuo $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify public Release bytes and update signatures
+        run: |
+          npm ci --ignore-scripts
+          mkdir -p output/public-release
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" > output/release.json
+          gh release download "$GITHUB_REF_NAME" --dir output/public-release
+          node scripts/verify-public-release.mjs output/release.json output/public-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Public-release-verification
+          path: output/public-release/verification.json
